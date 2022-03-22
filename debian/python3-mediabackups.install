@@ -1,0 +1,10 @@
+mediabackups/__init__.py usr/lib/python3/dist-packages/mediabackups
+mediabackups/Encryption.py usr/lib/python3/dist-packages/mediabackups
+mediabackups/File.py usr/lib/python3/dist-packages/mediabackups
+mediabackups/Minio.py usr/lib/python3/dist-packages/mediabackups
+mediabackups/MySQLMedia.py usr/lib/python3/dist-packages/mediabackups
+mediabackups/MySQLMetadata.py usr/lib/python3/dist-packages/mediabackups
+mediabackups/S3.py usr/lib/python3/dist-packages/mediabackups
+mediabackups/SwiftMedia.py usr/lib/python3/dist-packages/mediabackups
+mediabackups/Util.py usr/lib/python3/dist-packages/mediabackups
+usr/lib/python3.*/dist-packages/mediabackups*.egg-info usr/lib/python3/dist-packages

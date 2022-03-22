@@ -1,0 +1,26 @@
+Source: mediabackups
+Section: utils
+Priority: optional
+Maintainer: Jaime Crespo <jcrespo@wikimedia.org>
+Build-Depends: debhelper (>= 10), dh-python, python3-all-dev, python3-setuptools
+Standards-Version: 4.1.2
+Homepage: https://wikitech.wikimedia.org/wiki/Media_storage/Backups
+X-Python3-Version: >= 3.5
+
+Package: python3-mediabackups
+Architecture: any
+Depends: ${python3:Depends}, python3-yaml, python3-pymysql,
+         python3-boto3, python3-botocore, python3-swiftclient,
+         python3-numpy, age
+Description: Basic libraries to allow generation of WMF media backups
+ This package contains the base libraries needed for the main Wikimedia
+ Foundation-hosted wikis' multimedia files (stored on OpenStack Swift)
+ backups command line utilities.
+
+Package: mediabackups
+Architecture: any
+Depends: ${python3:Depends}, python3-mediabackups
+Description: Scripts to generate and recover WMF media backups
+ This package contains the main backups and restore utilities
+ for Wikimedia Foundation-hosted wikis' multimedia files (stored
+ on OpenStack Swift).

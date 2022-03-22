@@ -1,0 +1,15 @@
+.coverage
+/.idea/
+/.pybuild/
+/.vscode/
+/*.egg-info
+/.tox/
+/cover/
+/debian/.debhelper/
+/debian/*.debhelper
+/debian/*.substvars
+/debian/debhelper-build-stamp
+/debian/files
+/debian/tmp/
+/venv/
+__pycache__
