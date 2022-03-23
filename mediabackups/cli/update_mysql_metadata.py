@@ -1,11 +1,11 @@
 #!/usr/bin/python3
-"""read list of files from mw database tables and record it on the internal mediabackups table"""
+"""read list of files from mw database tables and update existing records on the internal mediabackups tables"""
 
 import logging
 import os
 
-import mediabackups.MySQLMedia
-import mediabackups.MySQLMetadata
+from mediabackups.MySQLMedia import MySQLMedia
+from mediabackups.MySQLMetadata import MySQLMetadata
 from mediabackups.Util import read_yaml_config, read_dblist
 
 READ_CONFIG_FILE = '/etc/mediabackup/mw_db.conf'
@@ -30,8 +30,8 @@ def main():
         logger.info('------------------------------------------------')
         logger.info(' Gathering metadata from %s...', wiki)
         logger.info('------------------------------------------------')
-        backup = mediabackups.MySQLMedia.MySQLMedia(config)
-        metadata = mediabackups.MySQLMetadata.MySQLMetadata(config=read_yaml_config(WRITE_CONFIG_FILE))
+        backup = MySQLMedia(config)
+        metadata = MySQLMetadata(config=read_yaml_config(WRITE_CONFIG_FILE))
         backup.connect_db()
         metadata.connect_db()
 
@@ -41,7 +41,7 @@ def main():
             for batch in backup.list_files(table_source=table_source):
                 for f in batch:
                     logger.info(f)
-                metadata.add(batch)
+                metadata.update(wiki, batch)
         backup.close_db()
         metadata.close_db()
         logger.info('Finished processing %s', wiki)
