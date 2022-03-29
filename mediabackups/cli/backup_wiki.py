@@ -22,22 +22,18 @@ TMPDIR = '/srv/mediabackup'
 
 class DownloadException(Exception):
     """Raised on errors while trying to download the file from production"""
-    pass
 
 
 class UploadException(Exception):
     """Raised on errors while trying to uplaod the file into the backup storage"""
-    pass
 
 
 class DuplicateException(Exception):
     """Raised in case the file already exists on the backup storage"""
-    pass
 
 
 class EncryptionException(Exception):
     """Raised in case attempting to encrypt a file fails"""
-    pass
 
 
 def download_file_from_production(f, tmp_dir):
@@ -153,7 +149,8 @@ def main():
                     'id': file_id, 'file': f, 'status': new_status, 'location': location}
                 )
                 try:
-                    os.remove(download_path)
+                    if download_path is not None:
+                        os.remove(download_path)
                 except OSError:
                     pass  # ignoring errors as the file may not exist
         metadata.update_status(status_list)

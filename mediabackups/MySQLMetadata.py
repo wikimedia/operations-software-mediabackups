@@ -2,6 +2,7 @@
 Implements the MySQLConnectionError, MySQLQueryError and MySQLMetadata classes
 """
 import logging
+import os
 
 import pymysql
 
@@ -10,12 +11,10 @@ from mediabackups.File import File
 
 class MySQLConnectionError(Exception):
     """Exception generated after MySQL has a connection problem"""
-    pass
 
 
 class MySQLQueryError(Exception):
     """Exception generated after MySQL has a query problem"""
-    pass
 
 
 class MySQLMetadata:
@@ -103,7 +102,7 @@ class MySQLMetadata:
         database.
         """
         query_backups = """SELECT wiki_name, upload_name, storage_container_name, storage_path,
-                                files.sha1, backups.sha256, size, status_name,
+                                files.sha1 as sha1, backups.sha256 as sha256, size, status_name,
                                 upload_timestamp,  archived_timestamp, deleted_timestamp,
                                 backup_status_name, backup_time, endpoint_url
                            FROM backups
@@ -119,39 +118,32 @@ class MySQLMetadata:
         query = query_backups + query + end_where + order_by
         logger = logging.getLogger('backup')
         logger.debug(query)
-        cursor = self.db.cursor()
-        try:
-            cursor.execute(query, parameters)
-        except (pymysql.err.ProgrammingError, pymysql.err.InternalError):
-            logger.warning('A MySQL error occurred while executing: %s, '
-                           'trying to reconnect',
-                           query)
-            self.connect_db()
-            try:
-                cursor.execute(query, parameters)
-            except (pymysql.err.ProgrammingError, pymysql.err.InternalError) as mysql_error:
-                logger.error('Query failed again after trying to reconnect')
-                raise MySQLQueryError from mysql_error
-        rows = cursor.fetchall()
-        self.db.commit()
-        cursor.close()
+        _, rows = self.query_and_fetchall(query, parameters)
         backups = list()
+        non_public_wikis = self.get_non_public_wikis()
         for row in rows:
+            wiki = row['wiki_name'].decode('utf-8')
+            sha256 = row['sha256'].decode('utf-8')
+            backup_path = os.path.join(wiki, sha256[:3], sha256)
+            if wiki in non_public_wikis:
+                backup_path += ".age"
             backups.append({
-                'wiki': row[0].decode('utf-8'),
-                'title': row[1].decode('utf-8'),
-                'production_container': row[2].decode('utf-8'),
-                'production_path': row[3].decode('utf-8'),
-                'sha1': row[4].decode('utf-8'),
-                'sha256': row[5].decode('utf-8'),
-                'size': row[6],
-                'production_status': row[7].decode('utf-8'),
-                'upload_date': row[8],
-                'archive_date': row[9],
-                'delete_date': row[10],
-                'backup_status': row[11].decode('utf-8'),
-                'backup_date': row[12],
-                'backup_location': row[13].decode('utf-8')
+                'wiki': wiki,
+                'title': row['upload_name'].decode('utf-8'),
+                'production_container': row['storage_container_name'].decode('utf-8'),
+                'production_path': row['storage_path'].decode('utf-8'),
+                'sha1': row['sha1'].decode('utf-8'),
+                'sha256': row['sha256'].decode('utf-8'),
+                'size': row['size'],
+                'production_status': row['status_name'].decode('utf-8'),
+                'upload_date': row['upload_timestamp'],
+                'archive_date': row['archived_timestamp'],
+                'delete_date': row['deleted_timestamp'],
+                'backup_status': row['backup_status_name'].decode('utf-8'),
+                'backup_date': row['backup_time'],
+                'backup_location': row['endpoint_url'].decode('utf-8'),
+                'backup_container': 'mediabackups',
+                'backup_path': backup_path
             })
         return backups
 
@@ -160,53 +152,22 @@ class MySQLMetadata:
         Returns True if the given string is a valid wiki on the mediabackups metadata
         database, False otherwise.
         """
-        logger = logging.getLogger('backup')
-        cursor = self.db.cursor()
         query = """SELECT 1 FROM wikis
                    WHERE wiki_name = %s"""
-        try:
-            cursor.execute(query, wiki)
-        except (pymysql.err.ProgrammingError, pymysql.err.InternalError):
-            logger.warning('A MySQL error occurred while executing: %s, '
-                           'trying to reconnect',
-                           query)
-            self.connect_db()
-            try:
-                cursor.execute(query, wiki)
-            except (pymysql.err.ProgrammingError, pymysql.err.InternalError) as mysql_error:
-                logger.error('Query failed again after trying to reconnect')
-                raise MySQLQueryError from mysql_error
-        is_valid = (cursor.rowcount == 1)
-        self.db.commit()
-        cursor.close()
-        return is_valid
+        _, rows = self.query_and_fetchall(query, (wiki, ))
+        return len(rows) == 1
 
     def get_non_public_wikis(self):
         """
         Returns a list of private, closed or deleted wikis which should use encryption when backed up.
         We add closed & deleted wikis to the list, as it is unclear if those are private or not.
         """
-        logger = logging.getLogger('backup')
-        cursor = self.db.cursor()
         query = """SELECT wiki_name FROM wikis
                    JOIN wiki_types ON wikis.type = wiki_types.id
                    WHERE type_name <> 'public' ORDER BY wiki_name"""
-        try:
-            cursor.execute(query)
-        except (pymysql.err.ProgrammingError, pymysql.err.InternalError):
-            logger.warning('A MySQL error occurred while executing: %s, '
-                           'trying to reconnect',
-                           query)
-            self.connect_db()
-            try:
-                cursor.execute(query)
-            except (pymysql.err.ProgrammingError, pymysql.err.InternalError) as mysql_error:
-                logger.error('Query failed again after trying to reconnect')
-                raise MySQLQueryError from mysql_error
-        rows = cursor.fetchall()
-        self.db.commit()
-        cursor.close()
-        return [row[0].decode('utf-8') for row in rows]
+        _, rows = self.query_and_fetchall(query)
+
+        return [row['wiki_name'].decode('utf-8') for row in rows]
 
     def process_files(self):
         """
@@ -215,11 +176,10 @@ class MySQLMetadata:
         dictionary of Files, keyed by a unique identifier
         """
         logger = logging.getLogger('backup')
-        (numeric_wiki, numeric_type, numeric_container,
-         numeric_status, numeric_backup_status) = self.get_fks()
-        string_wiki = {v: k for (k, v) in numeric_wiki.items()}
-        string_container = {v: k for (k, v) in numeric_container.items()}
-        string_status = {v: k for (k, v) in numeric_status.items()}
+        (_, _, _, _,
+         numeric_backup_status,
+         string_wiki, string_type, string_status, string_container,
+         _) = self.get_fks()
 
         select_query = """SELECT    id, wiki, upload_name,
                                     storage_container, storage_path,
@@ -232,65 +192,23 @@ class MySQLMetadata:
                           LIMIT     {}
                           FOR UPDATE""".format(self.batchsize)
         while True:
-            cursor = self.db.cursor(pymysql.cursors.DictCursor)
-            try:
-                cursor.execute(select_query, (numeric_backup_status['pending'], ))
-            # handle potential loss of connection
-            except (pymysql.err.ProgrammingError, pymysql.err.InternalError):
-                logger.warning('A MySQL error occurred while selecting the list '
-                               'of files, trying to reconnect.')
-                self.connect_db()
-                cursor = self.db.cursor(pymysql.cursors.DictCursor)
-                try:
-                    cursor.execute(select_query, (numeric_backup_status['pending'], ))
-                except (pymysql.err.ProgrammingError, pymysql.err.InternalError) as mysql_error:
-                    logger.error('A MySQL error occurred again while reconnecting '
-                                 'and querying the table, aborting')
-                    raise MySQLQueryError from mysql_error
-            if cursor.rowcount is None or cursor.rowcount <= 0:
+            result, rows = self.query_and_fetchall(select_query, (numeric_backup_status['pending'], ))
+            if len(rows) <= 0:
                 break
             files = dict()
-            rows = cursor.fetchall()
             for row in rows:
-                files[row['id']] = File(wiki=string_wiki.get(row['wiki'], None),
-                                        upload_name=(row['upload_name'].decode('utf-8')
-                                                     if row['upload_name'] is not None else None),
-                                        status=string_status.get(row['status'], None),
-                                        storage_container=string_container.get(
-                                            row['storage_container'], None
-                                        ),
-                                        storage_path=(row['storage_path'].decode('utf-8')
-                                                      if row['storage_path'] is not None else None),
-                                        sha1=(row['sha1'].decode('utf-8')
-                                              if row['sha1'] is not None else None))
-            cursor.close()
+                files[row['id']] = File.row2File(row, string_wiki, string_type, string_status,
+                                                 string_container)
             update_query = """UPDATE files
                               SET backup_status = %s
                               WHERE id IN ({})""".format(', '.join([str(i) for i in files]))
-            cursor = self.db.cursor(pymysql.cursors.DictCursor)
-            try:
-                result = cursor.execute(update_query, (numeric_backup_status['processing'], ))
-            # handle potential loss of connection
-            except (pymysql.err.ProgrammingError, pymysql.err.InternalError) as mysql_error:
-                logger.warning('A MySQL error occurred while making the list '
-                               'of files "pending", trying to reconnect.')
-                self.connect_db()
-                cursor = self.db.cursor(pymysql.cursors.DictCursor)
-                try:
-                    result = cursor.execute(update_query, (numeric_backup_status['processing'], ))
-                except (pymysql.err.ProgrammingError, pymysql.err.InternalError) as mysql_error_2:
-                    logger.error('A MySQL error occurred again while reconnecting '
-                                 'and updating the table, aborting')
-                    raise MySQLQueryError from mysql_error_2
-                if result != len(files):
-                    logger.error('The number of rows updated (%s) was different '
-                                 'than expected (%s)',
-                                 result,
-                                 len(files))
-                    raise MySQLQueryError from mysql_error
-            cursor.close()
-            self.db.commit()  # unlock the rows
-
+            result, rows = self.query_and_fetchall(update_query, (numeric_backup_status['processing'], ))
+            if result != len(files):
+                logger.error('The number of rows updated (%s) was different '
+                             'than expected (%s)',
+                             result,
+                             len(files))
+                raise MySQLQueryError
             yield files
 
     def update_status(self, file_list):
@@ -301,49 +219,35 @@ class MySQLMetadata:
         status ('pending', 'processing', etc.)}
         """
         logger = logging.getLogger('backup')
-        (numeric_wiki, numeric_type, numeric_container,
-         numeric_status, numeric_backup_status) = self.get_fks()
+        (numeric_wiki, _, _, _,
+         numeric_backup_status,
+         _, _, _, _, _) = self.get_fks()
         update_query = 'UPDATE files SET backup_status = %s WHERE id = %s'
         insert_query = """INSERT into backups (location, wiki, sha256, sha1)
                           VALUES (%s, %s, %s, %s)"""
         for file_dictionary in file_list:
             file_id = file_dictionary['id']
             backup_status = file_dictionary['status']
-            cursor = self.db.cursor(pymysql.cursors.DictCursor)
-            try:
-                result = cursor.execute(update_query,
-                                        (numeric_backup_status[backup_status], file_id))
-            except (pymysql.err.ProgrammingError, pymysql.err.InternalError):
-                logger.error('A MySQL error occurred again while updating'
-                             'the files table for file id %s',
-                             file_id)
-                return -1
+            parameters = (numeric_backup_status[backup_status], file_id)
+            result, _ = self.query_and_fetchall(update_query, parameters)
             if result != 1:
                 logger.error('Expecting to update 1 row, but %s were affected',
                              result)
                 raise MySQLQueryError
-            cursor.close()
             if backup_status == 'backedup':
                 f = file_dictionary['file']
-                cursor = self.db.cursor(pymysql.cursors.DictCursor)
+                parameters = (file_dictionary['location'], numeric_wiki[f.wiki], f.sha256, f.sha1)
                 try:
-                    result = cursor.execute(insert_query,
-                                            (file_dictionary['location'],
-                                             numeric_wiki[f.wiki],
-                                             f.sha256,
-                                             f.sha1))
+                    result, _ = self.query_and_fetchall(insert_query, parameters)
                 except pymysql.err.IntegrityError:
                     logger.warning('A file with the same sha256 (%s) was already uploaded '
                                    'at the same time to the same wiki', f.sha256)
-                except (pymysql.err.ProgrammingError, pymysql.err.InternalError):
+                except MySQLQueryError:
                     logger.error('A MySQL error occurred again while inserting the '
                                  'upload %s on the backups log for id %s',
                                  str(f),
                                  file_id)
                     return -1
-                cursor.close()
-
-        self.db.commit()
         return 0
 
     def read_dictionary_from_db(self, query):
@@ -351,23 +255,7 @@ class MySQLMetadata:
         Returns a dictionary from the 2-column query given, with the keys from
         the first row, and the values from the second
         """
-        logger = logging.getLogger('backup')
-        cursor = self.db.cursor()
-        try:
-            cursor.execute(query)
-        except (pymysql.err.ProgrammingError, pymysql.err.InternalError):
-            logger.warning('A MySQL error occurred while executing: %s, '
-                           'trying to reconnect',
-                           query)
-            self.connect_db()
-            try:
-                cursor.execute(query)
-            except (pymysql.err.ProgrammingError, pymysql.err.InternalError) as mysql_error:
-                logger.error('Query failed again after trying to reconnect')
-                raise MySQLQueryError from mysql_error
-        rows = cursor.fetchall()
-        self.db.commit()
-        cursor.close()
+        _, rows = self.query_and_fetchall(query)
         return {row[0].decode('utf-8'): int(row[1]) for row in rows}
 
     def get_fks(self):
@@ -379,22 +267,32 @@ class MySQLMetadata:
         * file_types
         * storage_containers (swift container names)
         * file_status
+        * backup_status
+        as well as the inverted dictionaries (string -> numeric)
         The results are returned as a list dictionaries, in the above order.
         """
         logger = logging.getLogger('backup')
         logger.info('Reading foreign key values for the files table from the database')
         wikis = self.read_dictionary_from_db('SELECT wiki_name, id FROM wikis')
         file_types = self.read_dictionary_from_db('SELECT type_name, id FROM file_types')
+        file_status = self.read_dictionary_from_db('SELECT status_name, id FROM file_status')
         storage_containers = self.read_dictionary_from_db(
             'SELECT storage_container_name, id FROM storage_containers'
         )
-        file_status = self.read_dictionary_from_db('SELECT status_name, id FROM file_status')
         backup_status = self.read_dictionary_from_db(
             'SELECT backup_status_name, id FROM backup_status'
         )
-        return wikis, file_types, storage_containers, file_status, backup_status
+        string_wiki = {v: k for (k, v) in wikis.items()}
+        string_file_types = {v: k for (k, v) in file_types.items()}
+        string_status = {v: k for (k, v) in file_status.items()}
+        string_container = {v: k for (k, v) in storage_containers.items()}
+        string_backup_status = {v: k for (k, v) in backup_status.items()}
 
-    def query_and_fetchall(self, query, parameters):
+        return (wikis, file_types, file_status, storage_containers, backup_status,
+                string_wiki, string_file_types, string_status, string_container,
+                string_backup_status)
+
+    def query_and_fetchall(self, query, parameters=None):
         """
         Given a query for the object open database connection, query and fetch
         all records in memory. Retry once by reconnecting if the query fails.
@@ -421,22 +319,95 @@ class MySQLMetadata:
         cursor.close()
         return result, rows
 
-    def update(self, wiki, files):
+    def update(self, files):
+        """
+        Given a dictionary of files {id: File, }, update the records containing
+        them on the database.
+        """
+        logger = logging.getLogger('backup')
+        if len(files) == 0:
+            logger.warning('Zero files to update, doing nothing')
+            return 0
+        (_, _, _, numeric_container,
+         numeric_backup_status,
+         _, _, _, string_container,
+         string_backup_status) = self.get_fks()
+
+        fields = sorted(files[0].properties().keys())
+        field_string_with_backup_status = ', '.join(fields + ['backup_status'])
+        field_string_with_file_id = ', '.join(['file_id'] + fields)
+        field_string_with_id = ', '.join(['id'] + fields)
+        success = dict()
+        for file_id in files:
+            f = files.get(file_id)
+            # check existing file record
+            query = f'SELECT {field_string_with_backup_status} FROM files WHERE id = %s'
+            parameters = (file_id, )
+            result, rows = self.query_and_fetchall(query, parameters)
+            if rows != 1:
+                logger.error('File %s with id %s not found on the list of files', str(f), str(file_id))
+                continue
+            row = rows[0]
+            old_storage_container = string_container.get(row.get('storage_container'))
+            old_storage_path = (row['storage_path'].decode('utf-8')
+                                if row.get('storage_path') is not None else None)
+            old_backup_status = string_backup_status.get(row.get('backup_status'))
+            # copy to history
+            query = (f'INSERT INTO file_history ({field_string_with_id}) '
+                     f'SELECT {field_string_with_file_id} FROM files WHERE id = %s')
+            parameters = (file_id)
+            result, _ = self.query_and_fetchall(query, parameters)
+            if result != 1:
+                logger.error('File %s with id %s was unable to be copied to file_history table',
+                             str(f), str(file_id))
+                continue
+            # update to latest properties
+            if ((old_storage_container != f.storage_container or
+                    old_storage_path != f.storage_path) and
+                    old_backup_status == numeric_backup_status['error']):
+                query = ('UPDATE files'
+                         'SET status = %s,'
+                         '    deleted_timestamp = %s,'
+                         '    archived_timestamp = %s,'
+                         '    storage_container = %s,'
+                         '    storage_path = %s,'
+                         '    backup_status = %s'
+                         'WHERE id = %s')
+                parameters = (f.status, f.deleted_timestamp, f.archive_timestamp,
+                              numeric_container[f.storage_container], f.storage_path,
+                              numeric_backup_status['pending'], file_id)
+            else:
+                query = ('UPDATE files'
+                         'SET status = %s,'
+                         '    deleted_timestamp = %s,'
+                         '    archived_timestamp = %s,'
+                         '    storage_container = %s,'
+                         '    storage_path = %s,'
+                         'WHERE id = %s')
+                parameters = (f.status, f.deleted_timestamp, f.archive_timestamp,
+                              numeric_container[f.storage_container], f.storage_path,
+                              file_id)
+            result, _ = self.query_and_fetchall(query, parameters)
+            if result != 1:
+                logger.error('File %s with id %s was unable to be updated on the files table',
+                             str(f), str(file_id))
+                continue
+            success[file_id] = True
+        return len(success)
+
+    def check_and_update(self, wiki, files):
         """
         Given a list of files from a given wiki, update existing records from
         the metadata database in a single transaction.
         """
         logger = logging.getLogger('backup')
         if len(files) == 0:
-            logger.warning('Zero files to update, doing nothing')
+            logger.warning('Zero files to check, doing nothing')
             return None
-        (numeric_wiki, numeric_type, numeric_container,
-         numeric_status, numeric_backup_status) = self.get_fks()
-        # string_wiki = {v: k for (k, v) in numeric_wiki.items()}
-        string_container = {v: k for (k, v) in numeric_container.items()}
-        string_status = {v: k for (k, v) in numeric_status.items()}
+        (numeric_wiki, _, _, _, _,
+         string_wiki, string_type, string_status, string_container, _) = self.get_fks()
 
-        fields = sorted(files[0].properties().keys())
+        fields = ['id'] + sorted(files[0].properties().keys())
         sha1list = [f.sha1 for f in files]
         parameters = [numeric_wiki[wiki], ]
         parameters.extend(sha1list)
@@ -447,29 +418,41 @@ class MySQLMetadata:
         matches = dict()
         # organize files to lookup by sha1
         for row in rows:
-            existing_sha1 = row['sha1'].decode() if row['sha1'] is not None else None
+            existing_sha1 = row['sha1'].decode('utf-8') if row.get('sha1') is not None else None
             if existing_sha1 not in matches:
                 matches[existing_sha1] = list()
-            matches[existing_sha1].append(
-                File(wiki=wiki,
-                     upload_name=(row['upload_name'].decode('utf-8')
-                                  if row['upload_name'] is not None else None),
-                     status=string_status.get(row['status'], None),
-                     storage_container=string_container.get(row['storage_container'], None),
-                     storage_path=(row['storage_path'].decode('utf-8')
-                                   if row['storage_path'] is not None else None),
-                     sha1=existing_sha1)
-            )
+            matches[existing_sha1].append({
+                'id': row['id'],
+                'file': File.row2File(row, string_wiki, string_type, string_status, string_container)
+            })
+        # check every file and see if it needs insertion or update
         files_to_add = list()
+        files_to_update = dict()
         for f in files:
             if f.sha1 in matches:
-                # TODO: process further to see what should be updated
-                # print(f'File: {f} was already on the database, skipping')
-                pass
+                match_found = False
+                for match in matches[f.sha1]:
+                    m = match['file']
+                    if (m.sha1 == f.sha1 and
+                            m.upload_name == f.upload_name and
+                            m.size == f.size and
+                            m.upload_timestamp == f.upload_timestamp):
+                        match_found = True
+                        if (m.status != f.status or
+                                m.archived_timestamp != f.archived_timestamp or
+                                m.deleted_timestamp != f.deleted_timestamp or
+                                m.storage_container != f.storage_container or
+                                m.storage_path != m.storage_path):
+                            files_to_update[match['id']] = f
+                        else:
+                            logger.info('File %s is unchanged, not doing anything', str(f))
+                if not match_found:
+                    logger.error('sha1 hash for %s is on the database, '
+                                 'but not matching record found', str(f))
             else:
                 files_to_add.append(f)
         logger.info('%s new files found on this batch', str(len(files_to_add)))
-        return self.add(files_to_add)
+        return self.update(files_to_update) + self.add(files_to_add)
 
     def add(self, files):
         """
@@ -479,10 +462,10 @@ class MySQLMetadata:
         logger = logging.getLogger('backup')
         if len(files) == 0:
             logger.warning('Zero files added, doing nothing')
-            return None
+            return 0
         # build the optimized insert query
-        (numeric_wiki, numeric_type, numeric_container,
-         numeric_status, backup_status) = self.get_fks()
+        (numeric_wiki, numeric_type, numeric_status, numeric_container, _,
+         _, _, _, _, _) = self.get_fks()
         fields = sorted(files[0].properties().keys())
         query = 'INSERT INTO files ({}) VALUES '.format(', '.join(fields))
         inserts = list()

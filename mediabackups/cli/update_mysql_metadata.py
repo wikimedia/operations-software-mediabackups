@@ -41,7 +41,7 @@ def main():
             for batch in backup.list_files(table_source=table_source):
                 for f in batch:
                     logger.info(f)
-                metadata.update(wiki, batch)
+                metadata.check_and_update(wiki, batch)
         backup.close_db()
         metadata.close_db()
         logger.info('Finished processing %s', wiki)

@@ -1,10 +1,19 @@
+mediabackups (0.2) bullseye; urgency=medium
+
+  * Completed support for update-mysql-metadata, which now
+    not only uploads new files, it also attempts to update
+    the metadata of existing files (except for renames and
+    other anomalies)
+
+ -- Jaime Crespo <jcrespo@wikimedia.org>  Tue, 29 Mar 2022 14:02:09 +0200
+
 mediabackups (0.1.1) bullseye; urgency=medium
 
   * Added support for update-mysql-metadata, which for now only
     adds newly added files, without updating the metadata of
     existing files
 
- -- jynus <jynus@sangai.jynus.com>  Wed, 23 Mar 2022 18:16:50 +0100
+ -- Jaime Crespo <jcrespo@wikimedia.org>  Wed, 23 Mar 2022 18:16:50 +0100
 
 mediabackups (0.1) bullseye; urgency=medium
 

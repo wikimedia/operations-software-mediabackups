@@ -24,6 +24,29 @@ class File:
         self.storage_container = storage_container
         self.storage_path = storage_path
 
+    @staticmethod
+    def row2File(row, string_wiki, string_file_type, string_status, string_container):
+        """Converts a dictionary containing the property keys (usually obtained
+           from querying a database) and returns a corresponding File object"""
+        return File(wiki=string_wiki.get(row['wiki']),
+                    upload_name=(row['upload_name'].decode('utf-8')
+                                 if row['upload_name'] is not None else None),
+                    size=row.get('size'),
+                    type=string_file_type.get(row.get('type')),
+                    status=string_status.get(row['status']),
+                    upload_timestamp=row.get('upload_timestamp'),
+                    deleted_timestamp=row.get('deleted_timestamp'),
+                    archived_timestamp=row.get('archived_timestamp'),
+                    md5=(row['md5'].decode('utf-8')
+                         if row['md5'] is not None else None),
+                    sha1=(row['sha1'].decode('utf-8')
+                          if row['sha1'] is not None else None),
+                    sha256=(row['sha256'].decode('utf-8')
+                            if row['sha256'] is not None else None),
+                    storage_container=string_container.get(row['storage_container']),
+                    storage_path=(row['storage_path'].decode('utf-8')
+                                  if row['storage_path'] is not None else None))
+
     def properties(self):
         """
         Returns a list with the file properties, in the expected
@@ -31,14 +54,15 @@ class File:
         """
         return {'wiki': self.wiki,
                 'upload_name': self.upload_name,
+                'size': self.size,
                 'file_type': self.type,
                 'status': self.status,
-                'sha1': self.sha1,
-                'md5': self.md5,
-                'size': self.size,
                 'upload_timestamp': self.upload_timestamp,
                 'archived_timestamp': self.archived_timestamp,
                 'deleted_timestamp': self.deleted_timestamp,
+                'md5': self.md5,
+                'sha1': self.sha1,
+                'sha256': self.sha256,
                 'storage_container': self.storage_container,
                 'storage_path': self.storage_path}
 

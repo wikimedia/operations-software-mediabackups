@@ -23,7 +23,7 @@ UNDERLINE = '\033[4m'
 END = '\033[0m'
 IDENTIFICATION_METHODS = [
     {'identifier': 'upload_title',
-     'description': f'{UNDERLINE}Title{END} of the file (with underscores) on upload or after rename',
+     'description': f'{UNDERLINE}Title{END} of the file on upload (or after rename)',
      'type': 'title'},
     {'identifier': 'sha1',
      'description': f'{UNDERLINE}sha1sum{END} hash of the file contents, in {UNDERLINE}hexadecimal{END}',
@@ -148,6 +148,8 @@ def get_interactive_parameters(metadata):
 
 def get_commandline_parameters(metadata):
     """TODO: get parameters from command like (non-interactively)"""
+    logger = logging.getLogger('recovery')
+    logger.debug(metadata)
     return {}
 
 
@@ -178,7 +180,7 @@ def print_and_confirm_recovery(file_list):
         sys.exit(3)
 
 
-def recover_to_local(non_public_wikis, files):
+def recover_to_local(files):
     """Download and save given backed up files into the local filesystem"""
     logger = logging.getLogger('recovery')
     logger.info('About to recover %s files...', str(len(files)))
@@ -192,9 +194,7 @@ def recover_to_local(non_public_wikis, files):
         download_path = f['production_path'].split('/')[-1] if f['production_path'] is not None else 'unnamed_file'
         while os.path.exists(download_path):
             download_path += '~'
-        backup_name = os.path.join(f['wiki'], f['sha256'][:3], f['sha256'])
-        if f['wiki'] in non_public_wikis:
-            backup_name += ".age"
+        backup_name = f['backup_path']
         backup_shard = f['backup_location']
         logger.info('Attempting to recover "%s" from "%s" into "%s"...', backup_name, backup_shard, download_path)
         if not s3api.check_file_exists(backup_name):
@@ -208,7 +208,7 @@ def recover_to_local(non_public_wikis, files):
         logger.info('"%s" was successfully downloaded from "%s" '
                     'and saved into "%s"',
                     backup_name, backup_shard, download_path)
-        if f['wiki'] in non_public_wikis:
+        if backup_name.endswith('.age'):
             if encryption.decrypt(download_path) != 0:
                 logger.error('Decryption of "%s" failed', download_path)
                 continue
@@ -264,14 +264,13 @@ def main():
         options = get_commandline_parameters(metadata)
 
     file_list = search_files(metadata, options)
-    non_public_wikis = metadata.get_non_public_wikis()
     metadata.close_db()
 
     if len(file_list) == 0:
         logger.warning('No file was found that matched the given criteria, exiting.')
         sys.exit(4)
     print_and_confirm_recovery(file_list)
-    recover_to_local(non_public_wikis, file_list)
+    recover_to_local(file_list)
 
 
 if __name__ == "__main__":
