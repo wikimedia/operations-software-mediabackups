@@ -9,6 +9,11 @@ import yaml
 from numpy import base_repr
 
 
+class EncounteredDBListExpression(Exception):
+    """Exception raised when a dblist expression is found isnide a dblist file"""
+    pass
+
+
 def read_dblist(path):
     """given a path, open and read it (assuming dblist format:
        'one like per database with comments'), and return it as
@@ -20,7 +25,7 @@ def read_dblist(path):
         # Strip comments ('#' to end-of-line) and trim whitespace.
         wiki = line.split('#')[0].strip()
         if wiki.startswith('%%'):
-            raise Exception('Encountered dblist expression inside dblist list file.')
+            raise EncounteredDBListExpression('Encountered dblist expression inside dblist list file.')
         if wiki != '':
             wikis.append(wiki)
     return wikis
@@ -41,7 +46,7 @@ def read_yaml_config(file_name):
 
 
 def sha1sum(path):
-    """Calculates the sha1 sum of a given file"""
+    """Calculates the sha1 sum of a given file without loading it at once in memory"""
     sha1sum = hashlib.sha1()
     with open(path, 'rb') as fd:
         block = fd.read(2**16)
