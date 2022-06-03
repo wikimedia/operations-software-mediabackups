@@ -1,6 +1,8 @@
 """
 Tests the Util.py classes and methods
 """
+import datetime
+
 from testfixtures import log_capture
 import unittest
 from unittest.mock import patch, mock_open
@@ -144,3 +146,14 @@ class Test_Util(unittest.TestCase):
         )
         for testcase in tests:
             self.assertEqual(Util.base36tobase16(testcase[0]), testcase[1])
+
+    def test_mwdate2datetime(self):
+        """Test checking conversion of dates from mw format to a proper timestamp"""
+        tests = (
+            ('19700101000001', datetime.datetime(1970, 1, 1, 0, 0, 1)),
+            ('20380119031408', datetime.datetime(2038, 1, 19, 3, 14, 8)),
+            (None, None),
+            ('a', datetime.datetime(1970, 1, 1, 0, 0, 1)),
+        )
+        for testcase in tests:
+            self.assertEqual(Util.mwdate2datetime(testcase[0]), testcase[1])

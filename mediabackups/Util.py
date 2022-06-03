@@ -1,11 +1,12 @@
 """utility functions for media backups"""
 
+from datetime import datetime
 import os
 from pathlib import Path
 import logging
+
 import hashlib
 import yaml
-
 from numpy import base_repr
 
 
@@ -83,3 +84,18 @@ def base36tobase16(number):
     (hexadecimal), zero-filled, low case.
     """
     return base_repr(int(number, 36), 16).lower().zfill(40)
+
+
+def mwdate2datetime(timestamp):
+    """
+    Converts a mediawiki-formatted date into a proper timestamp.
+    Returns None if none is received, otherwise, if the format
+    is incorrect, it will return epoch 0.
+    """
+    if timestamp is None:
+        return None
+    try:
+        date = datetime.strptime(timestamp, '%Y%m%d%H%M%S')
+    except ValueError:
+        date = datetime.strptime('19700101000001', '%Y%m%d%H%M%S')
+    return date

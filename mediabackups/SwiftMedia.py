@@ -78,7 +78,7 @@ class SwiftMedia:
         logger.exception('Wiki not found for container: %s', container_name)
         return None
 
-    def name2swift(self, image_name, status, archive_date=None, storage_name=None, sha1=None):
+    def name2swift(self, image_name, status, storage_name=None, sha1=None):
         '''
         returns a list with the actual container name (including the hashing) and
         the expected location with the virtual path. archive_date (string timestamp
