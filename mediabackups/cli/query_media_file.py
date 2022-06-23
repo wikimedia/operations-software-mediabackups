@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """
-Interactive command line application to restore a previously backed up file
-or files with a set given parameters (wiki, hash, title, etc.).
+Interactive command line application to query a file or set of
+files with a set of given parameters (wiki, hash, title, etc.).
 """
 import logging
 import sys
@@ -15,10 +15,9 @@ METADATA_CONFIG_FILE = '/etc/mediabackup/mediabackups_db.conf'
 
 def main():
     """
-    Recover a file or a list of file from media backups
-    and write it to the local filesystem.
+    Query a file or a list of files from media backups and print it on screen/logs.
     """
-    action = 'recovery'
+    action = 'query'
     logger = logging.getLogger(action)
     logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s %(message)s',
                         handlers=[logging.FileHandler('/var/log/mediabackups/recovery.log'),
@@ -39,8 +38,7 @@ def main():
     if len(file_list) == 0:
         logger.warning('No file was found that matched the given criteria, exiting.')
         sys.exit(4)
-    iq.print_and_confirm_recovery(file_list)
-    iq.recover_to_local(file_list)
+    iq.print_and_finish(file_list)
 
 
 if __name__ == "__main__":
