@@ -87,11 +87,25 @@ class S3:
         Downloads the given s3 location (download_name) from the given
         server (endpoint_url) and saves it into the local file name,
         local_path.
-        Returns 0 on failure, -1 on error.
+        Returns 0 on success, -1 on error.
         """
         client = self.clients[self.endpoints.index(endpoint_url)]
         try:
             client.download_file(self.bucket, download_name, local_path)
+        except ClientError as ex:
+            logging.error(ex)
+            return -1
+        return 0
+
+    def delete_file(self, endpoint_url, name):
+        """
+        Downloads the given s3 location (name) from the given
+        server (endpoint_url) and removes it permanently.
+        Returns 0 on success, -1 on error.
+        """
+        client = self.clients[self.endpoints.index(endpoint_url)]
+        try:
+            client.delete_object(self.bucket, name)
         except ClientError as ex:
             logging.error(ex)
             return -1

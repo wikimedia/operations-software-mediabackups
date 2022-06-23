@@ -187,23 +187,23 @@ class InteractiveQuery:
 
         logger.info(f'Printed {str(len(file_list))} file(s) and finished execution')
 
-    def print_and_confirm_recovery(self, file_list):
+    def print_and_confirm_action(self, file_list):
         """
         Prints the list of files and its properties for user examination
         and prompts for confirmation
         """
         logger = logging.getLogger(self.action)
-        if self.action != 'recovery':
-            logger.critical(f'recovery action requested from a {self.action} operation, exiting')
+        if self.action not in ('recovery', 'deletion'):
+            logger.critical(f'query action requested from a {self.action} operation, exiting')
             sys.exit(-1)
 
         self.print_files(file_list)
 
         key = None
         while key not in ('y', 'Y', 'n', 'N'):
-            key = input(f'{UNDERLINE}Confirm{END} recovery of {len(file_list)} file(s)? ({UNDERLINE}y/n{END}) ')
+            key = input(f'{UNDERLINE}Confirm{END} {self.action} of {len(file_list)} file(s)? ({UNDERLINE}y/n{END}) ')
         if key.lower() == 'n':
-            logger.warning('Recovery aborted due to user input')
+            logger.warning('{self.action} aborted due to user input')
             sys.exit(3)
 
     def recover_to_local(self, files):
@@ -246,6 +246,36 @@ class InteractiveQuery:
         logger.info('%s out of %s files were successfully written '
                     'to the local filesystem.',
                     str(recovered_files), str(len(files)))
+
+    def delete_files(self, files):
+        """Delete and update metadata for given backed up files"""
+        logger = logging.getLogger(self.action)
+        if self.action != 'deletion':
+            logger.critical(f'deletion action requested from a {self.action} operation, exiting')
+            sys.exit(-1)
+
+        logger.info('About to delete %s files...', str(len(files)))
+
+        storage_config = read_yaml_config(RECOVERY_CONFIG_FILE)
+        s3api = S3(storage_config)
+
+        deleted_files = 0
+        for f in files:
+            backup_name = f['backup_path']
+            backup_shard = f['backup_location']
+            logger.info('Attempting to delete "%s" from "%s"', backup_name, backup_shard)
+            if not s3api.check_file_exists(backup_name):
+                logger.error('"%s" was not found on the backup storage "%s"', backup_name, backup_shard)
+                continue
+            if s3api.delete_file(backup_shard, backup_name) == -1:
+                logger.error('"%s" failed to be deleted from "%s" ',
+                             backup_name, backup_shard)
+                continue
+            logger.info('"%s" was successfully deleted from "%s" ',
+                        backup_name, backup_shard)
+            deleted_files += 1
+        logger.info('%s out of %s files were successfully deleted from backups.',
+                    str(deleted_files), str(len(files)))
 
     def search_files(self, metadata, options):
         """Given a search method, query the database in search of the matching files"""

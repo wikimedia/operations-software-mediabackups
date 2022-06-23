@@ -18,7 +18,7 @@ def main():
     Recover a file or a list of file from media backups
     and write it to the local filesystem.
     """
-    action = 'recovery'
+    action = 'deletion'
     logger = logging.getLogger(action)
     logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s %(message)s',
                         handlers=[logging.FileHandler('/var/log/mediabackups/recovery.log'),
@@ -40,7 +40,7 @@ def main():
         logger.warning('No file was found that matched the given criteria, exiting.')
         sys.exit(4)
     iq.print_and_confirm_action(file_list)
-    iq.recover_to_local(file_list)
+    iq.delete_files(file_list)
 
 
 if __name__ == "__main__":
