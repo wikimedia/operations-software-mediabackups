@@ -40,7 +40,11 @@ def main():
         logger.warning('No file was found that matched the given criteria, exiting.')
         sys.exit(4)
     iq.print_and_confirm_action(file_list)
-    iq.delete_files(file_list)
+    physically_deleted_files = iq.delete_files(file_list)
+    metadata = MySQLMetadata(read_yaml_config(METADATA_CONFIG_FILE))
+    metadata.connect_db()
+    metadata.mark_as_deleted(physically_deleted_files)
+    metadata.close_db()
 
 
 if __name__ == "__main__":

@@ -9,6 +9,13 @@ import pymysql
 from mediabackups.File import File
 
 
+class ReadDictionaryException(Exception):
+    """
+    Exception generated after a dictionary was attempted to be filled in
+    with MySQL data and it failed to do so, or returned 0 rows
+    """
+
+
 class MySQLConnectionError(Exception):
     """Exception generated after MySQL has a connection problem"""
 
@@ -96,13 +103,29 @@ class MySQLMetadata:
         parameters = (wiki, date)
         return self._query_backups(query, parameters)
 
+    def _swift2url(self, status, container, path):
+        """
+        Returns the public url of a given file with the production status, container name and path.
+        if there is some kind of error (e.g. a deleted file is provided, or a malformed or impossible
+        container), None is returned. Otherwise a string with the https of the public download
+        is returned.
+        """
+        if status == 'deleted':
+            return None
+        base_url = 'https://upload.wikimedia.org/'
+        container_tokens = container.split('-')
+        if len(container_tokens) < 2:
+            return None
+        return base_url + container_tokens[0] + '/' + container_tokens[1] + '/' + path
+
     def _query_backups(self, query, parameters):
         """
         Returns a list of files with the given upload name in the mediabackups metadata
         database.
         """
         query_backups = """SELECT wiki_name, upload_name, storage_container_name, storage_path,
-                                files.sha1 as sha1, backups.sha256 as sha256, size, status_name,
+                                files.id as file_id, files.sha1 as sha1,
+                                backups.sha256 as sha256, size, status_name,
                                 upload_timestamp,  archived_timestamp, deleted_timestamp,
                                 backup_status_name, backup_time, endpoint_url
                            FROM backups
@@ -128,6 +151,7 @@ class MySQLMetadata:
             if wiki in non_public_wikis:
                 backup_path += ".age"
             backups.append({
+                '_file_id': row['file_id'],
                 'wiki': wiki,
                 'title': row['upload_name'].decode('utf-8'),
                 'production_container': row['storage_container_name'].decode('utf-8'),
@@ -136,6 +160,9 @@ class MySQLMetadata:
                 'sha256': row['sha256'].decode('utf-8'),
                 'size': row['size'],
                 'production_status': row['status_name'].decode('utf-8'),
+                'production_url': self._swift2url(row['status_name'].decode('utf-8'),
+                                                  row['storage_container_name'].decode('utf-8'),
+                                                  row['storage_path'].decode('utf-8')),
                 'upload_date': row['upload_timestamp'],
                 'archive_date': row['archived_timestamp'],
                 'delete_date': row['deleted_timestamp'],
@@ -253,10 +280,13 @@ class MySQLMetadata:
     def read_dictionary_from_db(self, query):
         """
         Returns a dictionary from the 2-column query given, with the keys from
-        the first row, and the values from the second
+        the first row, and the values from the second. An exception if the
+        dictionary contains no rows.
         """
-        _, rows = self.query_and_fetchall(query)
-        return {row[0].decode('utf-8'): int(row[1]) for row in rows}
+        result, rows = self.query_and_fetchall(query)
+        if result <= 0:
+            raise ReadDictionaryException
+        return {row['name'].decode('utf-8'): int(row['id']) for row in rows}
 
     def get_fks(self):
         """
@@ -273,14 +303,14 @@ class MySQLMetadata:
         """
         logger = logging.getLogger('backup')
         logger.info('Reading foreign key values for the files table from the database')
-        wikis = self.read_dictionary_from_db('SELECT wiki_name, id FROM wikis')
-        file_types = self.read_dictionary_from_db('SELECT type_name, id FROM file_types')
-        file_status = self.read_dictionary_from_db('SELECT status_name, id FROM file_status')
+        wikis = self.read_dictionary_from_db('SELECT wiki_name as name, id FROM wikis')
+        file_types = self.read_dictionary_from_db('SELECT type_name as name, id FROM file_types')
+        file_status = self.read_dictionary_from_db('SELECT status_name as name, id FROM file_status')
         storage_containers = self.read_dictionary_from_db(
-            'SELECT storage_container_name, id FROM storage_containers'
+            'SELECT storage_container_name as name, id FROM storage_containers'
         )
         backup_status = self.read_dictionary_from_db(
-            'SELECT backup_status_name, id FROM backup_status'
+            'SELECT backup_status_name as name, id FROM backup_status'
         )
         string_wiki = {v: k for (k, v) in wikis.items()}
         string_file_types = {v: k for (k, v) in file_types.items()}
@@ -295,7 +325,7 @@ class MySQLMetadata:
     def query_and_fetchall(self, query, parameters=None):
         """
         Given a query for the object open database connection, query and fetch
-        all records in memory. Retry once by reconnecting if the query fails.
+        all records into memory. Retry once by reconnecting if the query fails.
         Return a list of dictionaries with all results
         """
         logger = logging.getLogger('backup')
@@ -494,6 +524,29 @@ class MySQLMetadata:
             raise MySQLQueryError
         return result
 
+    def mark_as_deleted(self, files):
+        """
+        Given a list of files that had been just pysically deleted from backups, update
+        its MySQL metadata to:
+        * remove its entry from the backups table
+        * Set its file entry as hard-deleted (it assumes all references for the wiki have
+          to be removed)
+        """
+        logger = logging.getLogger('deletion')
+        (_, _, file_status, _, _, _, _, _, _, _) = self.get_fks()
+        for f in files:
+            query = "DELETE FROM backups WHERE wiki = %s AND sha256 = %s"
+            parameters = (f['wiki'], f['sha256'])
+            result, _ = self.query_and_fetchall(query, parameters)
+            if result != 1:
+                logger.error('%s:%s failed to be deleted from backups metadata', f['wiki'], f['sha256'])
+            query = "UPDATE files SET status = %s WHERE id = %s"
+            parameters = (file_status['hard-deleted'], f['_file_id'])
+            result, _ = self.query_and_fetchall(query, parameters)
+            if result != 1:
+                logger.error('Row file.id: %s failed to update its file metadata', f['_file_id'])
+                continue
+
     def connect_db(self):
         """
         Connect to the database to read the file tables
@@ -516,3 +569,4 @@ class MySQLMetadata:
         Close db connections
         """
         self.db.close()
+        self.db = None

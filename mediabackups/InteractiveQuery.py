@@ -4,6 +4,7 @@ through a command line interface"""
 import datetime
 import logging
 import os
+import requests
 import sys
 
 from mediabackups.Encryption import Encryption
@@ -16,6 +17,7 @@ GREEN = '\033[92m'
 UNDERLINE = '\033[4m'
 END = '\033[0m'
 VALID_ACTIONS = ['deletion', 'query', 'recovery']
+HTTP_HEADERS = {'User-agent': 'mediabackups/InteractiveQuery https://phabricator.wikimedia.org/diffusion/OSWB/'}
 IDENTIFICATION_METHODS = [
     {'identifier': 'upload_title',
      'description': f'{UNDERLINE}Title{END} of the file on upload (or after rename)',
@@ -71,7 +73,7 @@ class InteractiveQuery:
         """
         logger = logging.getLogger(self.action)
         while True:
-            wiki = input(f'{UNDERLINE}Wiki{END} to {self.action} [default: {DEFAULT_WIKI}]: ')
+            wiki = input(f'{UNDERLINE}Wiki{END} for {self.action} [default: {DEFAULT_WIKI}]: ')
             if wiki == '':
                 wiki = DEFAULT_WIKI
             if not metadata.is_valid_wiki(wiki):
@@ -169,7 +171,8 @@ class InteractiveQuery:
             print()
             print(f'{GREEN}{i}){END}')
             for key, value in backup_file.items():
-                print(f'{key.ljust(20)} | {value}')
+                if not key.startswith('_'):  # hide some keys (internal ids)
+                    print(f'{key.ljust(20)} | {value}')
             i += 1
             print()
 
@@ -203,7 +206,7 @@ class InteractiveQuery:
         while key not in ('y', 'Y', 'n', 'N'):
             key = input(f'{UNDERLINE}Confirm{END} {self.action} of {len(file_list)} file(s)? ({UNDERLINE}y/n{END}) ')
         if key.lower() == 'n':
-            logger.warning('{self.action} aborted due to user input')
+            logger.warning(f'{self.action} aborted due to user input')
             sys.exit(3)
 
     def recover_to_local(self, files):
@@ -247,6 +250,24 @@ class InteractiveQuery:
                     'to the local filesystem.',
                     str(recovered_files), str(len(files)))
 
+    def check_deleted_from_production(self, files):
+        """
+        Makes sure that all files provided have been removed from production
+        before attempting to delete them
+        """
+        logger = logging.getLogger(self.action)
+        for f in files:
+            if f['production_url'] is not None:
+                response = requests.head(f['production_url'], headers=HTTP_HEADERS)
+                if response.status_code != 404:
+                    logger.error('We got an HTTP status code of %s when we '
+                                 'tried querying %s from production, we expected a 404.',
+                                 str(response.status_code), f['production_url'])
+                    logger.error('Aborting deletion process.')
+                    sys.exit(6)
+        logger.info('All files were queried from production '
+                    'and none were found publicly available: %s', f['production_url'])
+
     def delete_files(self, files):
         """Delete and update metadata for given backed up files"""
         logger = logging.getLogger(self.action)
@@ -259,23 +280,31 @@ class InteractiveQuery:
         storage_config = read_yaml_config(RECOVERY_CONFIG_FILE)
         s3api = S3(storage_config)
 
-        deleted_files = 0
+        # failsafe- we check all files intended to be deleted to make sure none are currently publicly available
+        self.check_deleted_from_production(files)
+
+        deleted_files = []
         for f in files:
             backup_name = f['backup_path']
             backup_shard = f['backup_location']
             logger.info('Attempting to delete "%s" from "%s"', backup_name, backup_shard)
             if not s3api.check_file_exists(backup_name):
-                logger.error('"%s" was not found on the backup storage "%s"', backup_name, backup_shard)
-                continue
+                # check if it was deleted on this batch (common storage location)
+                if len([x for x in deleted_files if x['wiki'] == f['wiki'] and x['sha256'] == f['sha256']]) > 0:
+                    logger.info('"%s" was a duplicate of a previous file and already deleted', backup_name)
+                else:
+                    logger.error('"%s" was not found on the backup storage "%s"', backup_name, backup_shard)
+                    continue
             if s3api.delete_file(backup_shard, backup_name) == -1:
                 logger.error('"%s" failed to be deleted from "%s" ',
                              backup_name, backup_shard)
                 continue
             logger.info('"%s" was successfully deleted from "%s" ',
                         backup_name, backup_shard)
-            deleted_files += 1
-        logger.info('%s out of %s files were successfully deleted from backups.',
-                    str(deleted_files), str(len(files)))
+            deleted_files.append(f)
+        logger.info('%s out of %s files were successfully pysically deleted from backups.',
+                    str(len(deleted_files)), str(len(files)))
+        return deleted_files
 
     def search_files(self, metadata, options):
         """Given a search method, query the database in search of the matching files"""
