@@ -334,14 +334,14 @@ class MySQLMetadata:
             result = cursor.execute(query, parameters)
         # handle potential loss of connection
         except (pymysql.err.ProgrammingError, pymysql.err.InternalError):
-            logger.warning('A MySQL error occurred while inserting on the files, '
+            logger.warning('A MySQL error occurred while executing query, '
                            'retrying connection')
             self.connect_db()
             cursor = self.db.cursor(pymysql.cursors.DictCursor)
             try:
                 result = cursor.execute(query, parameters)
             except (pymysql.err.ProgrammingError, pymysql.err.InternalError) as mysql_error:
-                logger.error('A MySQL error occurred again while reconnecting '
+                logger.error('A MySQL error occurred again after reconnecting '
                              'and querying the table, aborting')
                 raise MySQLQueryError from mysql_error
         rows = cursor.fetchall()
@@ -524,7 +524,7 @@ class MySQLMetadata:
             raise MySQLQueryError
         return result
 
-    def mark_as_deleted(self, files):
+    def mark_as_deleted(self, files, dry_mode=True):
         """
         Given a list of files that had been just pysically deleted from backups, update
         its MySQL metadata to:
@@ -534,18 +534,34 @@ class MySQLMetadata:
         """
         logger = logging.getLogger('deletion')
         (_, _, file_status, _, _, _, _, _, _, _) = self.get_fks()
+        errors = 0
         for f in files:
-            query = "DELETE FROM backups WHERE wiki = %s AND sha256 = %s"
+            if dry_mode:
+                query = "SELECT 1 FROM backups WHERE wiki = %s AND sha256 = %s"
+            else:
+                query = "DELETE FROM backups WHERE wiki = %s AND sha256 = %s"
             parameters = (f['wiki'], f['sha256'])
             result, _ = self.query_and_fetchall(query, parameters)
-            if result != 1:
+            if not dry_mode and result != 1:
                 logger.error('%s:%s failed to be deleted from backups metadata', f['wiki'], f['sha256'])
-            query = "UPDATE files SET status = %s WHERE id = %s"
-            parameters = (file_status['hard-deleted'], f['_file_id'])
+                errors += 1
+            if dry_mode:
+                query = "SELECT 1 FROM files WHERE id = %s"
+                parameters = (f['_file_id'], )
+            else:
+                query = "UPDATE files SET status = %s WHERE id = %s"
+                parameters = (file_status['hard-deleted'], f['_file_id'])
             result, _ = self.query_and_fetchall(query, parameters)
-            if result != 1:
+            if not dry_mode and result != 1:
                 logger.error('Row file.id: %s failed to update its file metadata', f['_file_id'])
-                continue
+                errors += 1
+        if errors > 0:
+            logger.error('%s error(s) found while trying to update metadata', str(errors))
+        elif dry_mode:
+            logger.warning('Metadata update completed correctly, '
+                           'but database not actually touched because we are in DRY MODE!')
+        else:
+            logger.info('Metadata update completed correctly- no database errors.')
 
     def connect_db(self):
         """

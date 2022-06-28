@@ -14,6 +14,7 @@ from mediabackups.Util import read_yaml_config, base36tobase16
 DEFAULT_WIKI = 'commonswiki'
 RECOVERY_CONFIG_FILE = '/etc/mediabackup/mediabackups_recovery.conf'
 GREEN = '\033[92m'
+RED = '\033[31m'
 UNDERLINE = '\033[4m'
 END = '\033[0m'
 VALID_ACTIONS = ['deletion', 'query', 'recovery']
@@ -57,7 +58,7 @@ class InteractiveQuery:
     Implementes methods needed to query, recover and delete media backups from a
     unix command line interface
     """
-    def __init__(self, action):
+    def __init__(self, action, dry_mode=True):
         """Initializes what is the intended action for the interactive query:
            A recovery, a query or a deletion"""
         if action not in VALID_ACTIONS:
@@ -65,6 +66,7 @@ class InteractiveQuery:
             logger.critical(f'Action should be one of: {VALID_ACTIONS}, fatal error, exiting')
             sys.exit(-1)
         self.action = action
+        self.dry_mode = dry_mode
 
     def get_wiki_interactively(self, metadata):
         """
@@ -201,6 +203,11 @@ class InteractiveQuery:
             sys.exit(-1)
 
         self.print_files(file_list)
+        if self.action == 'deletion':
+            if self.dry_mode:
+                print(f"{RED}Executing deletion in dry mode, so files will not be actually deleted{END}")
+            else:
+                print(f"{RED}WARNING! File deletion cannot be reverted{END}")
 
         key = None
         while key not in ('y', 'Y', 'n', 'N'):
@@ -295,14 +302,18 @@ class InteractiveQuery:
                 else:
                     logger.error('"%s" was not found on the backup storage "%s"', backup_name, backup_shard)
                     continue
-            if s3api.delete_file(backup_shard, backup_name) == -1:
-                logger.error('"%s" failed to be deleted from "%s" ',
-                             backup_name, backup_shard)
-                continue
-            logger.info('"%s" was successfully deleted from "%s" ',
-                        backup_name, backup_shard)
+            if self.dry_mode:
+                logger.warning("Not actually deleting %s from %s because we are in DRY MODE - but otherwise succesful.",
+                               backup_name, backup_shard)
+            else:
+                if s3api.delete_file(backup_shard, backup_name) == -1:
+                    logger.error('"%s" failed to be deleted from "%s" ',
+                                 backup_name, backup_shard)
+                    continue
+                logger.info('"%s" was successfully deleted from "%s" ',
+                            backup_name, backup_shard)
             deleted_files.append(f)
-        logger.info('%s out of %s files were successfully pysically deleted from backups.',
+        logger.info('%s out of %s files were successfully deleted from backup storage.',
                     str(len(deleted_files)), str(len(files)))
         return deleted_files
 
