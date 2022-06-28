@@ -1,11 +1,9 @@
-mediabackups (0.2) bullseye; urgency=medium
+mediabackups (0.1.2) bullseye; urgency=medium
+  * Add new scripts to query and delete existing backups (T311215)
+  * Additional unit tests
+  * Added support to update mysql metadata (EXPERIMENTAL)
 
-  * Completed support for update-mysql-metadata, which now
-    not only uploads new files, it also attempts to update
-    the metadata of existing files (except for renames and
-    other anomalies)
-
- -- Jaime Crespo <jcrespo@wikimedia.org>  Tue, 29 Mar 2022 14:02:09 +0200
+ -- jynus <jynus@sangai.jynus.com>  Tue, 28 Jun 2022 13:44:49 +0100
 
 mediabackups (0.1.1) bullseye; urgency=medium
 

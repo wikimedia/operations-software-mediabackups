@@ -3,3 +3,5 @@ usr/bin/gather-mysql-metadata
 usr/bin/update-mysql-metadata
 usr/bin/backup-wiki
 usr/bin/restore-media-file
+usr/bin/query-media-file
+usr/bin/delete-media-file
