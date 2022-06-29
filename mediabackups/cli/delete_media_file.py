@@ -22,7 +22,7 @@ def main():
     dry_mode = True
     logger = logging.getLogger(action)
     logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s %(message)s',
-                        handlers=[logging.FileHandler('/var/log/mediabackups/recovery.log'),
+                        handlers=[logging.FileHandler(f'/var/log/mediabackups/{action}.log'),
                                   logging.StreamHandler()],
                         level=logging.INFO)
     metadata = MySQLMetadata(read_yaml_config(METADATA_CONFIG_FILE))
