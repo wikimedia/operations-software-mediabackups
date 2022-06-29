@@ -7,7 +7,7 @@ with open('README.md', 'r') as fh:
 setup(
     name='mediabackups',
     description='mediabackups',
-    version='0.1.2',
+    version='0.1.3',
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://phabricator.wikimedia.org/diffusion/OSMB/",
