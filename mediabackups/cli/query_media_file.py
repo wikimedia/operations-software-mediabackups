@@ -39,6 +39,7 @@ def main():
         logger.warning('No file was found that matched the given criteria, exiting.')
         sys.exit(4)
     iq.print_and_finish(file_list)
+    iq.cleanup()
 
 
 if __name__ == "__main__":

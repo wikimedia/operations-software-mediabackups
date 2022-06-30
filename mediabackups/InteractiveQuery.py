@@ -67,6 +67,18 @@ class InteractiveQuery:
             sys.exit(-1)
         self.action = action
         self.dry_mode = dry_mode
+        logger = logging.getLogger(self.action)
+        if self.action == 'deletion':
+            # deletions are an usafe operation, provide the user an extra warning
+            if self.dry_mode:
+                print(f'{RED}This is a dry run deletion- '
+                      f'no actual file or metadata will be affected, '
+                      f'even if the script will follow the same steps and confirmation.{END}')
+            else:
+                print(f'{RED}An actual backup file deletion will be performed- '
+                      f'these actions are undoable- although you will be given the '
+                      f'chance of a final confirmation.{END}')
+        logger.info('Starting an interactive %s session', self.action)
 
     def get_wiki_interactively(self, metadata):
         """
@@ -316,6 +328,17 @@ class InteractiveQuery:
         logger.info('%s out of %s files were successfully deleted from backup storage.',
                     str(len(deleted_files)), str(len(files)))
         return deleted_files
+
+    def cleanup(self):
+        """
+        Latest chanages done at the end of a session (for now, just print a warning)
+        """
+        logger = logging.getLogger(self.action)
+        if self.action in ['recovery', 'deletion']:
+            # warn to perform the same action again on other dcs for recoveries and deletions
+            print(f'{UNDERLINE}Remember to perform the same {self.action} on the other datacenter too '
+                  f'(only data from one site was affected for the current session!).{END}')
+        logger.info('Finishing the interactive %s session', self.action)
 
     def search_files(self, metadata, options):
         """Given a search method, query the database in search of the matching files"""

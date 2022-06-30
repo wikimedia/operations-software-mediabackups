@@ -3,6 +3,8 @@ mediabackups (0.1.3) bullseye; urgency=medium
   * Make delete-media-file be on dry-run mode by default,
     require --execute parameter to actually delete a file
   * Make sure each cli command logs on a separate file
+  * Make clearer to the user when running on dry run and
+    remind them to do it for the other datacenter
 
  -- jynus <jcrespo@wikimedia.org>  Wed, 29 Jun 2022 13:03:25 +0200
 

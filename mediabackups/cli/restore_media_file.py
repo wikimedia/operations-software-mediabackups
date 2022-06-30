@@ -41,6 +41,7 @@ def main():
         sys.exit(4)
     iq.print_and_confirm_action(file_list)
     iq.recover_to_local(file_list)
+    iq.cleanup()
 
 
 if __name__ == "__main__":

@@ -52,6 +52,7 @@ def main():
     metadata.connect_db()
     metadata.mark_as_deleted(physically_deleted_files, dry_mode=dry_mode)
     metadata.close_db()
+    iq.cleanup()
 
 
 if __name__ == "__main__":
