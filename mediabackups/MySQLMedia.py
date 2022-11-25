@@ -224,7 +224,7 @@ class MySQLMedia:
         logger = logging.getLogger('backup')
         if self.db is None:
             logger.error('You must connect to the database before attempting to read tables')
-            raise(MySQLNotConnected)
+            raise MySQLNotConnected
 
         # MySQL query iteration (paging over title)
         for query in self.calculate_query(table_source):
