@@ -330,6 +330,7 @@ class MySQLMetadata:
         """
         logger = logging.getLogger('backup')
         cursor = self.db.cursor(pymysql.cursors.DictCursor)
+        logger.debug('Executing the query: "%s" with parameters: %s', query, parameters)
         try:
             result = cursor.execute(query, parameters)
         # handle potential loss of connection
@@ -533,16 +534,16 @@ class MySQLMetadata:
           to be removed)
         """
         logger = logging.getLogger('deletion')
-        (_, _, file_status, _, _, _, _, _, _, _) = self.get_fks()
+        (numeric_wiki, _, file_status, _, _, _, _, _, _, _) = self.get_fks()
         errors = 0
         for f in files:
             if dry_mode:
                 query = "SELECT 1 FROM backups WHERE wiki = %s AND sha256 = %s"
             else:
                 query = "DELETE FROM backups WHERE wiki = %s AND sha256 = %s"
-            parameters = (f['wiki'], f['sha256'])
+            parameters = (numeric_wiki[f['wiki']], f['sha256'])
             result, _ = self.query_and_fetchall(query, parameters)
-            if not dry_mode and result != 1:
+            if result != 1:
                 logger.error('%s:%s failed to be deleted from backups metadata', f['wiki'], f['sha256'])
                 errors += 1
             if dry_mode:
@@ -552,7 +553,7 @@ class MySQLMetadata:
                 query = "UPDATE files SET status = %s WHERE id = %s"
                 parameters = (file_status['hard-deleted'], f['_file_id'])
             result, _ = self.query_and_fetchall(query, parameters)
-            if not dry_mode and result != 1:
+            if result != 1:
                 logger.error('Row file.id: %s failed to update its file metadata', f['_file_id'])
                 errors += 1
         if errors > 0:
