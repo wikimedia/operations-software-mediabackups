@@ -19,7 +19,7 @@ Description: Basic libraries to allow generation of WMF media backups
 
 Package: mediabackups
 Architecture: any
-Depends: ${python3:Depends}, python3-mediabackups (>= 0.1.3)
+Depends: ${python3:Depends}, python3-mediabackups (>= 0.1.4)
 Description: Scripts to generate and recover WMF media backups
  This package contains the main backups and restore utilities
  for Wikimedia Foundation-hosted wikis' multimedia files (stored

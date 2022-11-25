@@ -1,3 +1,10 @@
+mediabackups (0.1.4) bullseye; urgency=medium
+
+  * Fix regression by which S3 deletion api call fails
+  * Minor syntax issue fix
+
+ -- Jaime Crespo <jcrespo@wikimedia.org>  Fri, 25 Nov 2022 09:47:36 +0100
+
 mediabackups (0.1.3) bullseye; urgency=medium
 
   * Make delete-media-file be on dry-run mode by default,
