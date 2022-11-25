@@ -76,7 +76,8 @@ class S3:
         """
         location_id, client = self.find_shard(upload_name)
         try:
-            client.upload_file(file_path, self.bucket, upload_name)
+            client.upload_file(Filename=file_path, Bucket=self.bucket,
+                               Key=upload_name)
         except ClientError as ex:
             logging.error(ex)
             return -1
@@ -91,7 +92,8 @@ class S3:
         """
         client = self.clients[self.endpoints.index(endpoint_url)]
         try:
-            client.download_file(self.bucket, download_name, local_path)
+            client.download_file(Bucket=self.bucket, Key=download_name,
+                                 Filename=local_path)
         except ClientError as ex:
             logging.error(ex)
             return -1
@@ -105,7 +107,7 @@ class S3:
         """
         client = self.clients[self.endpoints.index(endpoint_url)]
         try:
-            client.delete_object(self.bucket, name)
+            client.delete_object(Bucket=self.bucket, Key=name)
         except ClientError as ex:
             logging.error(ex)
             return -1
@@ -123,7 +125,8 @@ class S3:
             print(filename)
             path = os.path.join(file_dir, filename)
             sha1 = sha1sum(path)
-            result = self.upload_file(path, os.path.join(wiki, filename, sha1))
+            result = self.upload_file(Filename=path, Bucket=self.bucket,
+                                      Key=os.path.join(wiki, filename, sha1))
             if result != 0:
                 exit_code = -1
         return exit_code
