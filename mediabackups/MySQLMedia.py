@@ -233,16 +233,18 @@ class MySQLMedia:
                 continue
             # return results in batches of (at most) batchsize for processing
             while True:
-                rows = cursor.fetchmany(self.batchsize)
-                if not rows:
-                    logger.debug('Reached the end of the query set')
-                    break
-                files = list()
-                for row in rows:
-                    files.append(self._process_row(row))
-                yield files
-            cursor.close()
-        logger.debug('Reached the end of the table')
+                try:
+                    rows = cursor.fetchmany(self.batchsize)
+                    if len(rows) > 0:
+                        files = list()
+                        for row in rows:
+                            files.append(self._process_row(row))
+                        yield files
+                    else:
+                        raise StopIteration
+                except StopIteration:
+                    cursor.close()
+                    return
 
     def connect_db(self):
         """

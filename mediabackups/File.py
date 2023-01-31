@@ -24,6 +24,17 @@ class File:
         self.storage_container = storage_container
         self.storage_path = storage_path
 
+    def __eq__(self, other):
+        """Define """
+        return vars(self) == vars(other)
+
+    def __hash__(self):
+        """
+        Return a consistend hash of a file using its sha1 hash.
+        The sha1 hash should always be present and unmutable.
+        """
+        return hash(self.sha1)
+
     @staticmethod
     def row2File(row, string_wiki, string_file_type, string_status, string_container):
         """Converts a dictionary containing the property keys (usually obtained

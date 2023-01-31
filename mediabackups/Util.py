@@ -58,7 +58,7 @@ def sha1sum(path):
 
 
 def sha256sum(path):
-    """Calculates the sha256 sum of a given file"""
+    """Calculates the sha256 sum of a given file without loading it at once in memory"""
     sha256sum = hashlib.sha256()
     with open(path, 'rb') as fd:
         block = fd.read(2**16)

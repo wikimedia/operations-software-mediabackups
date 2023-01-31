@@ -3,6 +3,7 @@ Implements the MySQLConnectionError, MySQLQueryError and MySQLMetadata classes
 """
 import logging
 import os
+import urllib.parse
 
 import pymysql
 
@@ -25,7 +26,7 @@ class MySQLQueryError(Exception):
 
 
 class MySQLMetadata:
-    """Prepare and generate a media backup"""
+    """Create, update and query MySQL backup metadata to manage media backups"""
 
     def __init__(self, config):
         """Constructor"""
@@ -116,7 +117,8 @@ class MySQLMetadata:
         container_tokens = container.split('-')
         if len(container_tokens) < 2:
             return None
-        return base_url + container_tokens[0] + '/' + container_tokens[1] + '/' + path
+        return (base_url + urllib.parse.quote(container_tokens[0]) + '/' + urllib.parse.quote(container_tokens[1])
+                + '/' + urllib.parse.quote(path))
 
     def _query_backups(self, query, parameters):
         """
@@ -242,8 +244,12 @@ class MySQLMetadata:
         """
         Updates the status of a file list, an array of dictionaries with the
         following structure:
-        {id: numeric row id, file: file object, status: string with the new
-        status ('pending', 'processing', etc.)}
+        {'id': unique numeric row id,
+         'file': file object,
+         'status': string with the new status ('pending', 'processing', etc.),
+         'location': numeric id where the backup was sent to (usually, the id of a server)-
+                     only for the backedup transition
+        }
         """
         logger = logging.getLogger('backup')
         (numeric_wiki, _, _, _,
@@ -283,8 +289,11 @@ class MySQLMetadata:
         the first row, and the values from the second. An exception if the
         dictionary contains no rows.
         """
-        result, rows = self.query_and_fetchall(query)
-        if result <= 0:
+        try:
+            result, rows = self.query_and_fetchall(query)
+        except MySQLQueryError:
+            raise ReadDictionaryException from MySQLQueryError
+        if len(rows) <= 0:
             raise ReadDictionaryException
         return {row['name'].decode('utf-8'): int(row['id']) for row in rows}
 
@@ -364,7 +373,7 @@ class MySQLMetadata:
          _, _, _, string_container,
          string_backup_status) = self.get_fks()
 
-        fields = sorted(files[0].properties().keys())
+        fields = sorted(files[list(files.keys())[0]].properties().keys())
         field_string_with_backup_status = ', '.join(fields + ['backup_status'])
         field_string_with_file_id = ', '.join(['file_id'] + fields)
         field_string_with_id = ', '.join(['id'] + fields)
@@ -375,7 +384,7 @@ class MySQLMetadata:
             query = f'SELECT {field_string_with_backup_status} FROM files WHERE id = %s'
             parameters = (file_id, )
             result, rows = self.query_and_fetchall(query, parameters)
-            if rows != 1:
+            if len(rows) != 1:
                 logger.error('File %s with id %s not found on the list of files', str(f), str(file_id))
                 continue
             row = rows[0]
@@ -392,10 +401,11 @@ class MySQLMetadata:
                 logger.error('File %s with id %s was unable to be copied to file_history table',
                              str(f), str(file_id))
                 continue
+
             # update to latest properties
             if ((old_storage_container != f.storage_container or
                     old_storage_path != f.storage_path) and
-                    old_backup_status == numeric_backup_status['error']):
+                    old_backup_status == 'error'):
                 query = ('UPDATE files'
                          'SET status = %s,'
                          '    deleted_timestamp = %s,'
@@ -404,9 +414,10 @@ class MySQLMetadata:
                          '    storage_path = %s,'
                          '    backup_status = %s'
                          'WHERE id = %s')
-                parameters = (f.status, f.deleted_timestamp, f.archive_timestamp,
-                              numeric_container[f.storage_container], f.storage_path,
-                              numeric_backup_status['pending'], file_id)
+                parameters = (f.status, f.deleted_timestamp, f.archived_timestamp,
+                              f.storage_container,
+                              f.storage_path,
+                              numeric_backup_status.get('pending'), file_id)
             else:
                 query = ('UPDATE files'
                          'SET status = %s,'
@@ -415,8 +426,9 @@ class MySQLMetadata:
                          '    storage_container = %s,'
                          '    storage_path = %s,'
                          'WHERE id = %s')
-                parameters = (f.status, f.deleted_timestamp, f.archive_timestamp,
-                              numeric_container[f.storage_container], f.storage_path,
+                parameters = (f.status, f.deleted_timestamp, f.archived_timestamp,
+                              numeric_container.get(f.storage_container) if f.storage_container else None,
+                              f.storage_path,
                               file_id)
             result, _ = self.query_and_fetchall(query, parameters)
             if result != 1:
@@ -434,7 +446,7 @@ class MySQLMetadata:
         logger = logging.getLogger('backup')
         if len(files) == 0:
             logger.warning('Zero files to check, doing nothing')
-            return None
+            return 0
         (numeric_wiki, _, _, _, _,
          string_wiki, string_type, string_status, string_container, _) = self.get_fks()
 
@@ -542,8 +554,8 @@ class MySQLMetadata:
             else:
                 query = "DELETE FROM backups WHERE wiki = %s AND sha256 = %s"
             parameters = (numeric_wiki[f['wiki']], f['sha256'])
-            result, _ = self.query_and_fetchall(query, parameters)
-            if result != 1:
+            result, rows = self.query_and_fetchall(query, parameters)
+            if (dry_mode and len(rows) != 1) or (not dry_mode and result != 1):
                 logger.error('%s:%s failed to be deleted from backups metadata', f['wiki'], f['sha256'])
                 errors += 1
             if dry_mode:
@@ -552,8 +564,8 @@ class MySQLMetadata:
             else:
                 query = "UPDATE files SET status = %s WHERE id = %s"
                 parameters = (file_status['hard-deleted'], f['_file_id'])
-            result, _ = self.query_and_fetchall(query, parameters)
-            if result != 1:
+            result, rows = self.query_and_fetchall(query, parameters)
+            if (dry_mode and len(rows) != 1) or (not dry_mode and result != 1):
                 logger.error('Row file.id: %s failed to update its file metadata', f['_file_id'])
                 errors += 1
         if errors > 0:
@@ -563,6 +575,7 @@ class MySQLMetadata:
                            'but database not actually touched because we are in DRY MODE!')
         else:
             logger.info('Metadata update completed correctly- no database errors.')
+        return errors
 
     def connect_db(self):
         """
