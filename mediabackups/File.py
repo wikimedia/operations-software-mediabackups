@@ -43,7 +43,7 @@ class File:
                     upload_name=(row['upload_name'].decode('utf-8')
                                  if row['upload_name'] is not None else None),
                     size=row.get('size'),
-                    type=string_file_type.get(row.get('type')),
+                    type=string_file_type.get(row.get('file_type')),
                     status=string_status.get(row['status']),
                     upload_timestamp=row.get('upload_timestamp'),
                     deleted_timestamp=row.get('deleted_timestamp'),
@@ -53,7 +53,7 @@ class File:
                     sha1=(row['sha1'].decode('utf-8')
                           if row['sha1'] is not None else None),
                     sha256=(row['sha256'].decode('utf-8')
-                            if row['sha256'] is not None else None),
+                            if row.get('sha256') is not None else None),
                     storage_container=string_container.get(row['storage_container']),
                     storage_path=(row['storage_path'].decode('utf-8')
                                   if row['storage_path'] is not None else None))
@@ -73,10 +73,9 @@ class File:
                 'deleted_timestamp': self.deleted_timestamp,
                 'md5': self.md5,
                 'sha1': self.sha1,
-                'sha256': self.sha256,
                 'storage_container': self.storage_container,
                 'storage_path': self.storage_path}
 
     def __repr__(self):
         return (str(self.wiki or '') + ' ' + str(self.upload_name or '') +
-                ' ' + str(self.sha1 or ''))
+                ' ' + str(self.sha1 or '') + ' ' + str(self.upload_timestamp))

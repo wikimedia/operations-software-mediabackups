@@ -1,6 +1,13 @@
+mediabackups (0.1.6) bullseye; urgency=medium
+
+  * Add unit tests
+  * Make updating of backups more reliable
+
+ -- Jaime Crespo <jcrespo@wikimedia.org>  Wed, 15 Feb 2023 13:26:50 +0100
+
 mediabackups (0.1.5) bullseye; urgency=medium
 
-  * Fix but by which metadata deletions didn't go through fully
+  * Fix bug by which metadata deletions didn't go through fully
 
  --  Jaime Crespo <jcrespo@wikimedia.org>  Fri, 25 Nov 2022 11:58:08 +0100
 

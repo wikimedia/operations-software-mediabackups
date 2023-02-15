@@ -126,7 +126,7 @@ class MySQLMetadata:
         database.
         """
         query_backups = """SELECT wiki_name, upload_name, storage_container_name, storage_path,
-                                files.id as file_id, files.sha1 as sha1,
+                                files.id as file_id, files.sha1 as sha1, file_types.Type_name as file_type,
                                 backups.sha256 as sha256, size, status_name,
                                 upload_timestamp,  archived_timestamp, deleted_timestamp,
                                 backup_status_name, backup_time, endpoint_url
@@ -137,6 +137,7 @@ class MySQLMetadata:
                            LEFT JOIN storage_containers ON files.storage_container = storage_containers.id
                            LEFT JOIN file_status ON files.status = file_status.id
                            LEFT JOIN backup_status ON files.backup_status = backup_status.id
+                           LEFT JOIN file_types ON files.file_type = file_types.id
                            WHERE """
         end_where = " AND backup_status_name IN ('backedup', 'duplicate')"
         order_by = " ORDER BY upload_name, status, upload_timestamp, archived_timestamp, deleted_timestamp"
@@ -161,6 +162,7 @@ class MySQLMetadata:
                 'sha1': row['sha1'].decode('utf-8'),
                 'sha256': row['sha256'].decode('utf-8'),
                 'size': row['size'],
+                'type': row['file_type'].decode('utf-8') if row['file_type'] is not None else None,
                 'production_status': row['status_name'].decode('utf-8'),
                 'production_url': self._swift2url(row['status_name'].decode('utf-8'),
                                                   row['storage_container_name'].decode('utf-8'),
@@ -221,7 +223,7 @@ class MySQLMetadata:
                           LIMIT     {}
                           FOR UPDATE""".format(self.batchsize)
         while True:
-            result, rows = self.query_and_fetchall(select_query, (numeric_backup_status['pending'], ))
+            result, rows = self.query_and_fetchall(select_query, (numeric_backup_status['pending'], ), commit=False)
             if len(rows) <= 0:
                 break
             files = dict()
@@ -331,7 +333,7 @@ class MySQLMetadata:
                 string_wiki, string_file_types, string_status, string_container,
                 string_backup_status)
 
-    def query_and_fetchall(self, query, parameters=None):
+    def query_and_fetchall(self, query, parameters=None, commit=True):
         """
         Given a query for the object open database connection, query and fetch
         all records into memory. Retry once by reconnecting if the query fails.
@@ -355,7 +357,8 @@ class MySQLMetadata:
                              'and querying the table, aborting')
                 raise MySQLQueryError from mysql_error
         rows = cursor.fetchall()
-        self.db.commit()
+        if commit:
+            self.db.commit()
         cursor.close()
         return result, rows
 
@@ -368,7 +371,8 @@ class MySQLMetadata:
         if len(files) == 0:
             logger.warning('Zero files to update, doing nothing')
             return 0
-        (_, _, _, numeric_container,
+        (_, numeric_type, numeric_status,
+         numeric_container,
          numeric_backup_status,
          _, _, _, string_container,
          string_backup_status) = self.get_fks()
@@ -393,40 +397,45 @@ class MySQLMetadata:
                                 if row.get('storage_path') is not None else None)
             old_backup_status = string_backup_status.get(row.get('backup_status'))
             # copy to history
-            query = (f'INSERT INTO file_history ({field_string_with_id}) '
-                     f'SELECT {field_string_with_file_id} FROM files WHERE id = %s')
+            query = (f'INSERT INTO file_history ({field_string_with_file_id}) '
+                     f'SELECT {field_string_with_id} FROM files WHERE id = %s')
             parameters = (file_id)
             result, _ = self.query_and_fetchall(query, parameters)
             if result != 1:
                 logger.error('File %s with id %s was unable to be copied to file_history table',
                              str(f), str(file_id))
                 continue
-
             # update to latest properties
             if ((old_storage_container != f.storage_container or
                     old_storage_path != f.storage_path) and
                     old_backup_status == 'error'):
-                query = ('UPDATE files'
-                         'SET status = %s,'
-                         '    deleted_timestamp = %s,'
-                         '    archived_timestamp = %s,'
-                         '    storage_container = %s,'
-                         '    storage_path = %s,'
-                         '    backup_status = %s'
-                         'WHERE id = %s')
-                parameters = (f.status, f.deleted_timestamp, f.archived_timestamp,
-                              f.storage_container,
+                query = """UPDATE files
+                           SET    upload_name = %s,
+                                  file_type = %s,
+                                  status = %s,
+                                  deleted_timestamp = %s,
+                                  archived_timestamp = %s,
+                                  storage_container = %s,
+                                  storage_path = %s,
+                                  backup_status = %s
+                           WHERE  id = %s"""
+                parameters = (f.upload_name, numeric_type.get(f.type), numeric_status.get(f.status),
+                              f.deleted_timestamp, f.archived_timestamp,
+                              numeric_container.get(f.storage_container) if f.storage_container else None,
                               f.storage_path,
                               numeric_backup_status.get('pending'), file_id)
             else:
-                query = ('UPDATE files'
-                         'SET status = %s,'
-                         '    deleted_timestamp = %s,'
-                         '    archived_timestamp = %s,'
-                         '    storage_container = %s,'
-                         '    storage_path = %s,'
-                         'WHERE id = %s')
-                parameters = (f.status, f.deleted_timestamp, f.archived_timestamp,
+                query = """UPDATE files
+                           SET    upload_name = %s,
+                                  file_type = %s,
+                                  status = %s,
+                                  deleted_timestamp = %s,
+                                  archived_timestamp = %s,
+                                  storage_container = %s,
+                                  storage_path = %s
+                           WHERE  id = %s"""
+                parameters = (f.upload_name, numeric_type.get(f.type), numeric_status.get(f.status),
+                              f.deleted_timestamp, f.archived_timestamp,
                               numeric_container.get(f.storage_container) if f.storage_container else None,
                               f.storage_path,
                               file_id)
@@ -435,6 +444,7 @@ class MySQLMetadata:
                 logger.error('File %s with id %s was unable to be updated on the files table',
                              str(f), str(file_id))
                 continue
+            logger.info('File %s was updated correctly and its old metadata moved to history')
             success[file_id] = True
         return len(success)
 
@@ -456,7 +466,8 @@ class MySQLMetadata:
         parameters.extend(sha1list)
         field_string = ', '.join(fields)
         sha1list_string = ', '.join(['%s'] * len(sha1list))
-        query = f'SELECT {field_string} FROM files WHERE wiki = %s AND sha1 IN ({sha1list_string})'
+        query = f"""SELECT {field_string} FROM files
+                    WHERE wiki = %s AND sha1 is not NULL AND sha1 IN ({sha1list_string})"""
         _, rows = self.query_and_fetchall(query, parameters)
         matches = dict()
         # organize files to lookup by sha1
@@ -472,29 +483,43 @@ class MySQLMetadata:
         files_to_add = list()
         files_to_update = dict()
         for f in files:
-            if f.sha1 in matches:
-                match_found = False
-                for match in matches[f.sha1]:
-                    m = match['file']
-                    if (m.sha1 == f.sha1 and
-                            m.upload_name == f.upload_name and
-                            m.size == f.size and
-                            m.upload_timestamp == f.upload_timestamp):
-                        match_found = True
-                        if (m.status != f.status or
-                                m.archived_timestamp != f.archived_timestamp or
-                                m.deleted_timestamp != f.deleted_timestamp or
-                                m.storage_container != f.storage_container or
-                                m.storage_path != m.storage_path):
-                            files_to_update[match['id']] = f
-                        else:
-                            logger.info('File %s is unchanged, not doing anything', str(f))
-                if not match_found:
-                    logger.error('sha1 hash for %s is on the database, '
-                                 'but not matching record found', str(f))
-            else:
+            matches_found = []
+            if f.sha1 is None:
+                continue
+            if f.sha1 not in matches:
                 files_to_add.append(f)
+                continue
+            for match in matches[f.sha1]:
+                m = match['file']
+                if (m.sha1 == f.sha1 and
+                        m.size == f.size and
+                        f.upload_timestamp is not None and
+                        m.upload_timestamp == f.upload_timestamp):
+                    matches_found.append(match)
+            if len(matches_found) == 0:
+                logger.warning('sha1 hash for %s is on the database, '
+                               'but not matching record found', str(f))
+                files_to_add.append(f)
+            elif len(matches_found) > 1:
+                logger.error('%s possible matches were found for %s, not updating it',
+                             str(len(matches_found)),
+                             str(f))
+            else:
+                match = matches_found[0]
+                m = match['file']
+                if ((m.status != f.status) or
+                        (m.upload_name != f.upload_name) or
+                        (m.type != f.type) or
+                        (m.archived_timestamp != f.archived_timestamp) or
+                        (m.deleted_timestamp != f.deleted_timestamp) or
+                        (m.storage_container != f.storage_container) or
+                        (m.storage_path != f.storage_path)):
+                    files_to_update[match['id']] = f
+                    logger.info('Scheduling update of %s (id %s) with %s', str(m), str(match['id']), str(f))
+                else:
+                    logger.debug('File %s is unchanged, not doing anything', str(f))
         logger.info('%s new files found on this batch', str(len(files_to_add)))
+        logger.info('%s files that need update on this batch', str(len(files_to_update)))
         return self.update(files_to_update) + self.add(files_to_add)
 
     def add(self, files):
@@ -535,6 +560,7 @@ class MySQLMetadata:
                          len(files),
                          result)
             raise MySQLQueryError
+        logger.info('%s files were inserted correctly', str(result))
         return result
 
     def mark_as_deleted(self, files, dry_mode=True):

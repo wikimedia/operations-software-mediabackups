@@ -39,9 +39,11 @@ def main():
             logger.info('')
             logger.info('=================== %s ===================', table_source)
             for batch in backup.list_files(table_source=table_source):
+                logger.info("Starting to process batch starting with file %s", str(batch[0]))
                 for f in batch:
-                    logger.info(f)
+                    logger.debug(f)
                 metadata.check_and_update(wiki, batch)
+                logger.info("Batch processed until file %s", str(batch[-1]))
         backup.close_db()
         metadata.close_db()
         logger.info('Finished processing %s', wiki)

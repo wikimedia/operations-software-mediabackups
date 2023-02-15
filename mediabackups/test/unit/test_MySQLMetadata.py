@@ -2,10 +2,10 @@
 Tests the MySQLMetadata.py classes and methods
 """
 import datetime
-
-import pymysql
 from unittest import TestCase
 from unittest.mock import patch  # , MagicMock
+
+import pymysql
 
 from mediabackups.MySQLMetadata import MySQLMetadata, MySQLQueryError, ReadDictionaryException, MySQLConnectionError
 from mediabackups.File import File
@@ -143,6 +143,7 @@ class Test_MySQLMetadata(TestCase):
                                                'storage_container_name': b'wikipedia-commons-0',
                                                'storage_path': b'Test.jpg', 'sha1': b'0', 'size': 0,
                                                'status_name': b'public',
+                                               'file_type': b'image',
                                                'upload_timestamp': datetime.datetime(2023, 1, 31, 21, 34, 56),
                                                'archived_timestamp': None, 'deleted_timestamp': None,
                                                'backup_status_name': b'backedup',
@@ -156,6 +157,7 @@ class Test_MySQLMetadata(TestCase):
                                    'sha1': '0', 'size': 0, 'production_status': 'public',
                                    'upload_date': datetime.datetime(2023, 1, 31, 21, 34, 56), 'archive_date': None,
                                    'delete_date': None, 'backup_status': 'backedup',
+                                   'type': 'image',
                                    'backup_date': datetime.datetime(2023, 1, 31, 21, 39, 12),
                                    'backup_location': 'https://backup1004.eqiad.wmnet:9000',
                                    'backup_container': 'mediabackups', 'backup_path': 'commonswiki/000/0000',
@@ -172,7 +174,7 @@ class Test_MySQLMetadata(TestCase):
                                                'sha1': b'1', 'size': 0, 'status_name': b'public',
                                                'upload_timestamp': datetime.datetime(2023, 1, 31, 21, 34, 56),
                                                'archived_timestamp': datetime.datetime(2023, 1, 31, 22, 2, 11),
-                                               'deleted_timestamp': None,
+                                               'deleted_timestamp': None, 'file_type': b'image',
                                                'backup_status_name': b'backedup',
                                                'backup_time': datetime.datetime(2023, 1, 31, 21, 39, 12),
                                                'endpoint_url': b'https://backup1004.eqiad.wmnet:9000',
@@ -182,6 +184,7 @@ class Test_MySQLMetadata(TestCase):
                                    'production_container': 'wikipedia-commons-0',
                                    'production_path': 'archive/20230131220211!Test.jpg',
                                    'sha1': '1', 'size': 0, 'production_status': 'public',
+                                   'type': 'image',
                                    'upload_date': datetime.datetime(2023, 1, 31, 21, 34, 56),
                                    'archive_date': datetime.datetime(2023, 1, 31, 22, 2, 11),
                                    'delete_date': None, 'backup_status': 'backedup',
@@ -221,18 +224,18 @@ class Test_MySQLMetadata(TestCase):
                                      {1: 'public', 2: 'deleted'}, {1: 'container'}, {})
             mock_rows.side_effect = [(0, [{'id': 1, 'wiki': 1, 'upload_name': b'Test1.jpg', 'status': 1,
                                            'md5': b'0', 'sha1': b'0', 'sha256': b'0', 'storage_container': 1,
-                                           'storage_path': b'Test1.jpg', 'type': 1},
+                                           'storage_path': b'Test1.jpg', 'file_type': 1},
                                           {'id': 2, 'wiki': 1, 'upload_name': b'Test2.jpg', 'status': 2,
                                            'md5': b'0', 'sha1': b'0', 'sha256': b'0', 'storage_container': 1,
-                                           'storage_path': b'0.jpg', 'type': 1}]),
+                                           'storage_path': b'0.jpg', 'file_type': 1}]),
                                      (2, []),  # update
                                      (0, [{'id': 3, 'wiki': 1, 'upload_name': b'Test3.jpg', 'status': 1,
                                            'md5': b'0', 'sha1': b'0', 'sha256': b'0', 'storage_container': 1,
-                                           'storage_path': b'Test3.jpg', 'type': 1}]),
+                                           'storage_path': b'Test3.jpg', 'file_type': 1}]),
                                      (1, []),  # update
                                      (0, [{'id': 4, 'wiki': 1, 'upload_name': b'Test4.jpg', 'status': 2,
                                            'md5': b'0', 'sha1': b'0', 'sha256': b'0', 'storage_container': 1,
-                                           'storage_path': b'Test3.jpg', 'type': 1}]),
+                                           'storage_path': b'Test3.jpg', 'file_type': 1}]),
                                      (0, []),  # failed update
                                      (0, [])]  # end
             self.assertEqual(File(wiki='commonswiki', upload_name='Test1.jpg', status='public'),
@@ -382,7 +385,6 @@ class Test_MySQLMetadata(TestCase):
             mock_db.cursor.return_value.execute.return_value = 0  # affected rows
             mock_db.cursor.return_value.fetchall.return_value = query_return
             mock_db.cursor.return_value.commit.return_value = 0
-            mock_db.cursor.return_value.close.return_value = 0
             self.assertEqual(self.mysql_metadata.query_and_fetchall(query), (0, query_return))
 
         # connection lost once
@@ -456,6 +458,7 @@ class Test_MySQLMetadata(TestCase):
             mock_rows.side_effect = [(0, [{'id': 4, 'wiki': 1, 'upload_name': b'Test4.jpg', 'status': 1}]),  # select
                                      (1, []),  # insert
                                      (0, [])]  # update
+
             files = {2: File(wiki='commonswiki',
                              upload_name='Test3.jpg',
                              status='public')}
@@ -470,6 +473,7 @@ class Test_MySQLMetadata(TestCase):
                                            'storage_path': b'Test4.jpg'}]),
                                      (1, []),  # insert
                                      (1, [])]  # update
+
             files = {5: File(wiki='commonswiki',
                              upload_name='Test4.jpg',
                              status='public',
@@ -498,8 +502,13 @@ class Test_MySQLMetadata(TestCase):
                       sha1='a',
                       upload_timestamp=datetime.datetime(2023, 2, 14, 11, 17, 1),
                       size=100,
+                      type='image',
                       storage_container='container1',
-                      storage_path='Test6.jpg')]
+                      storage_path='Test6.jpg'),
+                 File(wiki='commonswiki',
+                      upload_name='Test6.jpg',
+                      status='public',
+                      sha1=None)]
 
         # already existing, unchanged
         with patch.object(self.mysql_metadata, 'query_and_fetchall') as mock_rows, \
@@ -509,8 +518,22 @@ class Test_MySQLMetadata(TestCase):
                                            'upload_timestamp': datetime.datetime(2023, 2, 14, 11, 17, 1),
                                            'archived_timestamp': None, 'deleted_timestamp': None,
                                            'status': 1, 'size': 100, 'md5': None, 'sha256': b'b',
+                                           'file_type': 1,
                                            'storage_container': 1, 'storage_path': b'Test6.jpg'}])]
             self.assertEqual(self.mysql_metadata.check_and_update('commonswiki', files), 0)
+
+        # existing under a different name
+        with patch.object(self.mysql_metadata, 'query_and_fetchall') as mock_rows, \
+             patch.object(self.mysql_metadata, 'get_fks') as mock_fks, \
+             patch.object(self.mysql_metadata, 'update', new=Test_MySQLMetadata.return_length):
+            mock_fks.return_value = fks
+            mock_rows.side_effect = [(0, [{'id': 2, 'sha1': b'a', 'wiki': 1, 'upload_name': b'Another.jpg',
+                                           'upload_timestamp': datetime.datetime(2023, 2, 14, 11, 17, 1),
+                                           'archived_timestamp': None, 'deleted_timestamp': None,
+                                           'status': 1, 'size': 100, 'md5': None, 'sha256': b'b',
+                                           'file_type': 1,
+                                           'storage_container': 1, 'storage_path': b'Test6.jpg'}])]
+            self.assertEqual(self.mysql_metadata.check_and_update('commonswiki', files), 1)
 
         # already existing, updated status
         with patch.object(self.mysql_metadata, 'query_and_fetchall') as mock_rows, \
@@ -521,22 +544,43 @@ class Test_MySQLMetadata(TestCase):
             mock_rows.side_effect = [(0, [{'id': 1, 'sha1': b'a', 'wiki': 1, 'upload_name': b'Test6.jpg',
                                            'upload_timestamp': datetime.datetime(2023, 2, 14, 11, 17, 1),
                                            'archived_timestamp': datetime.datetime(2023, 2, 14, 11, 35, 1),
-                                           'deleted_timestamp': None,
+                                           'deleted_timestamp': None, 'file_type': 1,
                                            'status': 2, 'size': 100, 'md5': None, 'sha256': b'b',
                                            'storage_container': 1, 'storage_path': b'Test6.jpg'}])]
             self.assertEqual(self.mysql_metadata.check_and_update('commonswiki', files), 1)
 
-        # a file with the same sha1 hash exists but has a different size
+        # more than 1 match with the same sha1, size and upload_date
         with patch.object(self.mysql_metadata, 'query_and_fetchall') as mock_rows, \
              patch.object(self.mysql_metadata, 'get_fks') as mock_fks:
+            mock_fks.return_value = fks
+            # multiple matches
+            mock_rows.side_effect = [(0, [{'id': 1, 'sha1': b'a', 'wiki': 1, 'upload_name': b'Test6.jpg',
+                                           'upload_timestamp': datetime.datetime(2023, 2, 14, 11, 17, 1),
+                                           'archived_timestamp': datetime.datetime(2023, 2, 14, 11, 35, 1),
+                                           'deleted_timestamp': None, 'file_type': 1,
+                                           'status': 2, 'size': 100, 'md5': None, 'sha256': b'b',
+                                           'storage_container': 1, 'storage_path': b'Test6.jpg'},
+                                          {'id': 1, 'sha1': b'a', 'wiki': 1, 'upload_name': b'TestA.jpg',
+                                           'upload_timestamp': datetime.datetime(2023, 2, 14, 11, 17, 1),
+                                           'archived_timestamp': datetime.datetime(2023, 2, 14, 11, 35, 1),
+                                           'deleted_timestamp': None, 'file_type': 1,
+                                           'status': 2, 'size': 100, 'md5': None, 'sha256': b'c',
+                                           'storage_container': 1, 'storage_path': b'TestB.jpg'}])]
+            self.assertEqual(self.mysql_metadata.check_and_update('commonswiki', files), 0)
+
+        # a file with the same sha1 hash exists but has a different size
+        with patch.object(self.mysql_metadata, 'query_and_fetchall') as mock_rows, \
+             patch.object(self.mysql_metadata, 'get_fks') as mock_fks, \
+             patch.object(self.mysql_metadata, 'add', new=Test_MySQLMetadata.return_length):
             mock_fks.return_value = fks
             # different size!
             mock_rows.side_effect = [(0, [{'id': 1, 'sha1': b'a', 'wiki': 1, 'upload_name': b'Test6.jpg',
                                            'upload_timestamp': datetime.datetime(2023, 2, 14, 11, 17, 1),
                                            'archived_timestamp': None, 'deleted_timestamp': None,
+                                           'file_type': 1,
                                            'status': 1, 'size': 200, 'md5': None, 'sha256': b'b',
                                            'storage_container': 1, 'storage_path': b'Test6.jpg'}])]
-            self.assertEqual(self.mysql_metadata.check_and_update('commonswiki', files), 0)
+            self.assertEqual(self.mysql_metadata.check_and_update('commonswiki', files), 1)
 
         # new file
         with patch.object(self.mysql_metadata, 'query_and_fetchall') as mock_rows, \
@@ -548,6 +592,7 @@ class Test_MySQLMetadata(TestCase):
                                            'upload_timestamp': datetime.datetime(2023, 2, 14, 11, 17, 1),
                                            'archived_timestamp': None, 'deleted_timestamp': None,
                                            'status': 1, 'size': 100, 'md5': None, 'sha256': b'b',
+                                           'file_type': 1,
                                            'storage_container': 1, 'storage_path': b'Test6.jpg'}])]
             self.assertEqual(self.mysql_metadata.check_and_update('commonswiki', files), 1)
 

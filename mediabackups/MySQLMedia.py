@@ -244,7 +244,8 @@ class MySQLMedia:
                         raise StopIteration
                 except StopIteration:
                     cursor.close()
-                    return
+                    break
+        return
 
     def connect_db(self):
         """

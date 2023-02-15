@@ -122,6 +122,7 @@ def main():
         status_list = list()
         for file_id, f in batch.items():
             location = None
+            download_path = None
             try:
                 download_path = download_file_from_production(f, tmp_dir)
                 handle_checksums(f, download_path)

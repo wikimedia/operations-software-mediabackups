@@ -2,7 +2,6 @@
 Tests the MySQLMedia.py classes and methods
 """
 import datetime
-
 from unittest import TestCase
 from unittest.mock import patch, MagicMock
 
@@ -228,18 +227,18 @@ class Test_MySQLMedia(TestCase):
                     self.assertEqual(list(self.mysql_media.list_files()), [[a_file]])
 
         # non-trivial batches
-        with patch.object(self.mysql_media, 'db') as mock_db:
-            with patch.object(self.mysql_media, 'query') as mock_query:
-                with patch.object(self.mysql_media, '_process_row') as mock_process:
-                    file1 = File('testwiki', 'test1', 'public')
-                    file2 = File('testwiki', 'test2', 'archived')
-                    file3 = File('testwiki', 'test3', 'deleted')
-                    mock_db.cursor.return_value = MagicMock()
-                    self.assertTrue(self.mysql_media.db is not None)
-                    mock_query.return_value.rowcount = 1
-                    mock_query.return_value.fetchmany.side_effect = [[{'test1': 'test1'},
-                                                                      {'test2': 'test2'}],
-                                                                     [{'test3', 'test3'}]]
-                    mock_query.return_value.close.return_value = True
-                    mock_process.side_effect = [file1, file2, file3]
-                    self.assertEqual(list(self.mysql_media.list_files()), [[file1, file2], [file3]])
+        with patch.object(self.mysql_media, 'db') as mock_db, \
+             patch.object(self.mysql_media, 'query') as mock_query, \
+             patch.object(self.mysql_media, '_process_row') as mock_process:
+            file1 = File('testwiki', 'test1', 'public')
+            file2 = File('testwiki', 'test2', 'archived')
+            file3 = File('testwiki', 'test3', 'deleted')
+            mock_db.cursor.return_value = MagicMock()
+            self.assertTrue(self.mysql_media.db is not None)
+            mock_query.return_value.rowcount = 2
+            mock_query.return_value.fetchmany.side_effect = [[{'test1': 'test1'},
+                                                              {'test2': 'test2'}],
+                                                             [{'test3', 'test3'}]]
+            mock_query.return_value.close.return_value = True
+            mock_process.side_effect = [file1, file2, file3]
+            self.assertEqual(list(self.mysql_media.list_files()), [[file1, file2], [file3]])
