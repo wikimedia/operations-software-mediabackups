@@ -27,6 +27,41 @@ CREATE TABLE `backups` (
 ) ENGINE=InnoDB DEFAULT CHARSET=binary;
 
 --
+-- Table structure for table `file_history`
+--
+
+CREATE TABLE `file_history` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `wiki` int(10) unsigned NOT NULL,
+  `upload_name` varbinary(255) DEFAULT NULL,
+  `storage_container` int(10) unsigned DEFAULT NULL,
+  `storage_path` varbinary(270) DEFAULT NULL,
+  `file_type` tinyint(3) unsigned DEFAULT NULL,
+  `status` tinyint(3) unsigned DEFAULT NULL,
+  `sha1` varbinary(40) DEFAULT NULL,
+  `md5` varbinary(32) DEFAULT NULL,
+  `size` int(10) unsigned DEFAULT NULL,
+  `upload_timestamp` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00',
+  `archived_timestamp` timestamp NULL DEFAULT NULL,
+  `deleted_timestamp` timestamp NULL DEFAULT NULL,
+  `file_update` timestamp NOT NULL DEFAULT current_timestamp(),
+  `file_id` int(10) unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `sha1` (`sha1`),
+  KEY `file_type` (`file_type`),
+  KEY `status` (`status`),
+  KEY `upload_name` (`upload_name`,`status`),
+  KEY `upload_timestamp` (`upload_timestamp`),
+  KEY `md5` (`md5`),
+  KEY `wiki_status_backup_status` (`wiki`,`status`),
+  KEY `wiki_backup_status` (`wiki`),
+  KEY `location` (`storage_container`,`storage_path`),
+  KEY `archived_timestamp` (`archived_timestamp`),
+  KEY `deleted_timestamp` (`deleted_timestamp`),
+  KEY `file_id` (`file_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=binary;
+
+--
 -- Table structure for table `file_status`
 --
 
@@ -44,7 +79,7 @@ CREATE TABLE `file_types` (
   `id` tinyint(3) unsigned NOT NULL AUTO_INCREMENT,
   `Type_name` varbinary(100) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=binary;
+) ENGINE=InnoDB DEFAULT CHARSET=binary;
 
 --
 -- Table structure for table `files`
