@@ -444,7 +444,7 @@ class MySQLMetadata:
                 logger.error('File %s with id %s was unable to be updated on the files table',
                              str(f), str(file_id))
                 continue
-            logger.info('File %s was updated correctly and its old metadata moved to history')
+            logger.info('File %s was updated correctly and its old metadata moved to history', str(f))
             success[file_id] = True
         return len(success)
 
