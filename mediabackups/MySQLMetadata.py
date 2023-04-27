@@ -603,6 +603,30 @@ class MySQLMetadata:
             logger.info('Metadata update completed correctly- no database errors.')
         return errors
 
+    def get_latest_upload_time(self, wiki):
+        """
+        Given a wiki db string, query the files table to search for the upload_timestamp
+        of the latest file registered on metadata. Useful to start a new backup process from
+        there.
+        """
+        logger = logging.getLogger('deletion')
+        (numeric_wiki, _, file_status, _, _, _, _, _, _, _) = self.get_fks()
+        query = """
+        SELECT max(upload_timestamp) AS upload_timestamp
+        FROM files
+        WHERE wiki = %s
+        AND status = %s
+        """
+        parameters = (numeric_wiki[wiki], file_status['public'])
+        result, rows = self.query_and_fetchall(query, parameters)
+        if len(rows) != 1:
+            logger.error('Failed to query the time of the latest succesful backup for %s', wiki)
+            return None
+        latest_succesful_timestamp = rows[0]['upload_timestamp']
+        logger.info('The latest upload time for a succesful backup of a public file in %s happened at: %s',
+                    wiki, str(latest_succesful_timestamp))
+        return latest_succesful_timestamp
+
     def connect_db(self):
         """
         Connect to the database to read the file tables

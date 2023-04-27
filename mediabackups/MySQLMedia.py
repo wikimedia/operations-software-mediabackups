@@ -53,7 +53,7 @@ class MySQLMedia:
                         ) as storage_path,
                         oi_size as size,
                         oi_media_type as type,
-                        STR_TO_DATE(oi_timestamp, '%Y%m%d%H%i%s') as upload_timestamp,
+                        STR_TO_DATE(oi_timestamp, '%%Y%%m%%d%%H%%i%%s') as upload_timestamp,
                         oi_archive_name as archived_name,
                         NULL as deleted_timestamp,
                         oi_sha1 as sha1
@@ -65,9 +65,9 @@ class MySQLMedia:
                         fa_storage_key as storage_path,
                         fa_size as size,
                         fa_media_type as type,
-                        STR_TO_DATE(fa_timestamp, '%Y%m%d%H%i%s') as upload_timestamp,
+                        STR_TO_DATE(fa_timestamp, '%%Y%%m%%d%%H%%i%%s') as upload_timestamp,
                         fa_archive_name as archived_name,
-                        STR_TO_DATE(fa_deleted_timestamp, '%Y%m%d%H%i%s') as deleted_timestamp,
+                        STR_TO_DATE(fa_deleted_timestamp, '%%Y%%m%%d%%H%%i%%s') as deleted_timestamp,
                         fa_sha1 as sha1
                    FROM filearchive""",
              ('fa_name', 'fa_storage_key'))}
