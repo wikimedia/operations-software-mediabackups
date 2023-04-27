@@ -10,6 +10,7 @@ from mediabackups.Util import read_yaml_config
 
 READ_CONFIG_FILE = '/etc/mediabackup/mw_db.conf'
 WRITE_CONFIG_FILE = '/etc/mediabackup/mediabackups_db.conf'
+HTTP_HEADERS = {'User-agent': 'mediabackups/recentuploads https://phabricator.wikimedia.org/diffusion/OSWB/'}
 
 
 def get_latest_uploaded_files_since(date):
@@ -27,7 +28,7 @@ def get_latest_uploaded_files_since(date):
     while True:
         req = request.copy()
         req.update(lastContinue)
-        result = requests.get(api_url, params=req).json()
+        result = requests.get(api_url, params=req, headers=HTTP_HEADERS).json()
         if 'error' in result:
             raise Exception(result['error'])
         if 'warnings' in result:
