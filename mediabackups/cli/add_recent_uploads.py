@@ -69,15 +69,15 @@ def main():
     config = read_yaml_config(READ_CONFIG_FILE)
     if 'wiki' not in config.keys():
         return
+    wiki = config['wiki']
 
-    backup = MySQLMedia(config)
+    mw = MySQLMedia(config)
     metadata = MySQLMetadata(config=read_yaml_config(WRITE_CONFIG_FILE))
-    backup.connect_db()
-    metadata.connect_db()
 
-    last_timestamp = datetime.datetime.utcnow() - datetime.timedelta(minutes=20)
     while True:
-        last_execution = datetime.datetime.utcnow()
+        mw.connect_db()
+        metadata.connect_db()
+        last_timestamp = metadata.get_latest_upload_time(wiki)
         for events in get_latest_uploaded_files_since(last_timestamp):
             batch = []
             uploads = events['logevents']
@@ -85,14 +85,13 @@ def main():
             for upload in uploads:
                 result = format_api_result(upload)
                 batch.append(result)
-            print(batch)
-            files = backup.query_files(batch)
-            print(files)
+            files = mw.query_files(batch)
             for f in files:
                 logger.debug(f)
-            metadata.check_and_update(config['wiki'], files)
+            metadata.check_and_update(wiki, files)
+        mw.close_db()
+        metadata.close_db()
         time.sleep(10)
-        last_timestamp = last_execution
 
 
 if __name__ == "__main__":
