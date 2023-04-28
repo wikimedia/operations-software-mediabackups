@@ -7,7 +7,7 @@ with open('README.md', 'r') as fh:
 setup(
     name='mediabackups',
     description='mediabackups',
-    version='0.1.6',
+    version='0.1.7',
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://phabricator.wikimedia.org/diffusion/OSMB/",
@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
            'gather-mysql-metadata = mediabackups.cli.gather_mysql_metadata:main',
            'update-mysql-metadata = mediabackups.cli.update_mysql_metadata:main',
+           'add-recent-uploads = mediabackups.cli.add_recent_uploads:main',
            'backup-wiki = mediabackups.cli.backup_wiki:main',
            'restore-media-file = mediabackups.cli.restore_media_file:main',
            'query-media-file = mediabackups.cli.query_media_file:main',

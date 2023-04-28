@@ -1,3 +1,10 @@
+mediabackups (0.1.7) bullseye; urgency=medium
+
+  * Add support for quick backups for recent uploads
+  * Several fixes in logs and other minor bugs
+
+ -- Jaime Crespo <jcrespo@wikimedia.org>  Fri, 28 Apr 2023 17:00:45 +0200
+
 mediabackups (0.1.6) bullseye; urgency=medium
 
   * Add unit tests
