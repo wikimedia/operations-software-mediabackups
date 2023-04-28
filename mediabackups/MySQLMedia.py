@@ -2,7 +2,7 @@
 This module implements the logic needed to query the list of available
 production media files directly from the production wikis databases.
 """
-
+import datetime
 import logging
 
 import pymysql
@@ -38,7 +38,7 @@ class MySQLMedia:
                         img_name as storage_path,
                         img_size as size,
                         img_media_type as type,
-                        STR_TO_DATE(img_timestamp, '%Y%m%d%H%i%s') as upload_timestamp,
+                        STR_TO_DATE(img_timestamp, '%%Y%%m%%d%%H%%i%%s') as upload_timestamp,
                         NULL as archived_name,
                         NULL as deleted_timstamp,
                         img_sha1 as sha1
@@ -246,6 +246,36 @@ class MySQLMedia:
                     cursor.close()
                     break
         return
+
+    def query_files(self, batch):
+        """
+        Given a batch (list of recently uploaded titles, timestamps and sha1 hashes), return the list of File objects
+        to be updated.
+        """
+        logger = logging.getLogger('backup')
+        files = []
+        self.db.autocommit(True)
+        for upload in batch:
+            # query db
+            query = self.source['image'][0]
+            query += ' WHERE img_name = %s AND img_timestamp = %s AND img_sha1 = %s'
+            parameters = (upload['title'],
+                          datetime.datetime.strftime(upload['upload_timestamp'], '%Y%m%d%H%M%S') if
+                          upload['upload_timestamp'] is not None else None,
+                          upload['sha1'])
+            cursor = self.query(query, parameters)
+            if cursor.rowcount == 1:
+                # return results as a File object
+                row = cursor.fetchall()[0]
+                recent_file = self._process_row(row)
+                logger.info('Checking if file %s has to be inserted or updated into the existing backups',
+                            upload['title'])
+                files.append(recent_file)
+                cursor.close()
+            else:
+                logger.warning('File %s was not found on the metadata database- is there lag or another issue?',
+                               upload['title'])
+        return files
 
     def connect_db(self):
         """
