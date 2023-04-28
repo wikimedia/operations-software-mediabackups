@@ -1,6 +1,7 @@
 mediabackups/cli/*.py usr/lib/python3/dist-packages/mediabackups/cli
 usr/bin/gather-mysql-metadata
 usr/bin/update-mysql-metadata
+usr/bin/add-recent-uploads
 usr/bin/backup-wiki
 usr/bin/restore-media-file
 usr/bin/query-media-file
