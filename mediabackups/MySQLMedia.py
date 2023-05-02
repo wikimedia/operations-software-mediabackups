@@ -228,7 +228,7 @@ class MySQLMedia:
 
         # MySQL query iteration (paging over title)
         for query in self.calculate_query(table_source):
-            cursor = self.query(query)
+            cursor = self.query(query, tuple())  # hack needed for missbehaviour of not escaping %%
             if cursor.rowcount is None or cursor.rowcount <= 0:
                 continue
             # return results in batches of (at most) batchsize for processing
