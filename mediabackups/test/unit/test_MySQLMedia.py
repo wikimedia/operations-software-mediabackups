@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 
 from mediabackups.MySQLMedia import MySQLMedia, MySQLQueryError, MySQLNotConnected
 from mediabackups.File import File
+import mediabackups.Util as Util
 
 
 class Test_MySQLMedia(TestCase):
@@ -81,6 +82,7 @@ class Test_MySQLMedia(TestCase):
         swift_mock.return_value = container
         with patch.object(self.mysql_media.swift, 'name2swift', swift_mock):
             self.assertEqual(vars(self.mysql_media._process_row(row)), vars(f))
+
         # archived non-deleted with storage path
         row = {'upload_name': b'Test.jpeg', 'size': 12, 'type': b'image/jpeg',
                'upload_timestamp': datetime.datetime(2022, 11, 30, 11, 25, 56),
@@ -99,6 +101,7 @@ class Test_MySQLMedia(TestCase):
         swift_mock.return_value = container
         with patch.object(self.mysql_media.swift, 'name2swift', swift_mock):
             self.assertEqual(vars(self.mysql_media._process_row(row)), vars(f))
+
         # archived deleted with storage path
         row = {'upload_name': b'Test.jpeg', 'size': 12, 'type': b'image/jpeg',
                'upload_timestamp': datetime.datetime(2022, 11, 30, 11, 25, 56),
@@ -118,6 +121,7 @@ class Test_MySQLMedia(TestCase):
         swift_mock.return_value = container
         with patch.object(self.mysql_media.swift, 'name2swift', swift_mock):
             self.assertEqual(vars(self.mysql_media._process_row(row)), vars(f))
+
         # deleted non-archived
         row = {'upload_name': b'Test.jpeg', 'size': 12, 'type': b'image/jpeg',
                'upload_timestamp': datetime.datetime(2022, 11, 30, 11, 25, 56),
@@ -135,6 +139,88 @@ class Test_MySQLMedia(TestCase):
                  deleted_timestamp=datetime.datetime(2022, 11, 30, 14, 25, 56),
                  sha1='2c5f4c5ff0e57ffcea85c1da92b4599336d75fb9', md5=None)
         swift_mock.return_value = container
+        with patch.object(self.mysql_media.swift, 'name2swift', swift_mock):
+            self.assertEqual(vars(self.mysql_media._process_row(row)), vars(f))
+
+        # null storage path
+        row = {'upload_name': b'Test.jpeg', 'size': 12, 'type': b'image/jpeg',
+               'upload_timestamp': datetime.datetime(2022, 11, 30, 11, 25, 56),
+               'deleted_timestamp': datetime.datetime(2022, 11, 30, 14, 25, 56),
+               'sha1': b'56le7dx4g21ssp3jyb0xc8a5vlk4fjt', 'status': 'deleted',
+               'wiki': 'commonswiki', 'archived_name': b'20221130132556!Test.jpeg',
+               'storage_path': None}
+        container = ('container', 'Test.jpeg')
+        f = File(wiki='commonswiki', upload_name='Test.jpeg',
+                 storage_container=container[0],
+                 storage_path=container[1],
+                 size=12, type='image/jpeg', status='deleted',
+                 upload_timestamp=datetime.datetime(2022, 11, 30, 11, 25, 56),
+                 deleted_timestamp=datetime.datetime(2022, 11, 30, 14, 25, 56),
+                 archived_timestamp=datetime.datetime(2022, 11, 30, 13, 25, 56),
+                 sha1='2c5f4c5ff0e57ffcea85c1da92b4599336d75fb9', md5=None)
+        swift_mock.return_value = container
+        with patch.object(self.mysql_media.swift, 'name2swift', swift_mock):
+            self.assertEqual(vars(self.mysql_media._process_row(row)), vars(f))
+
+        # null archived name but not null archived_timestamp
+        archived_timestamp = datetime.datetime(2022, 11, 30, 13, 25, 56)
+        row = {'upload_name': b'Test.jpeg', 'size': 12, 'type': b'image/jpeg',
+               'upload_timestamp': datetime.datetime(2022, 11, 30, 11, 25, 56),
+               'archived_timestamp': archived_timestamp,
+               'sha1': b'56le7dx4g21ssp3jyb0xc8a5vlk4fjt', 'status': 'archived',
+               'wiki': 'commonswiki',
+               'archived_name': None,
+               'storage_container': 'container',
+               'storage_path': b'/path/20221130132556!Test.jpeg'}
+        container = ('container', '/path/20221130132556!Test.jpeg')
+        f = File(wiki='commonswiki', upload_name='Test.jpeg',
+                 storage_container=container[0],
+                 storage_path=container[1],
+                 size=12, type='image/jpeg', status='archived',
+                 upload_timestamp=datetime.datetime(2022, 11, 30, 11, 25, 56),
+                 archived_timestamp=archived_timestamp,
+                 deleted_timestamp=None,
+                 sha1='2c5f4c5ff0e57ffcea85c1da92b4599336d75fb9', md5=None)
+        swift_mock.return_value = container
+        with patch.object(self.mysql_media.swift, 'name2swift', swift_mock), \
+             patch.object(Util, 'mwdate2datetime') as file_mock:
+            file_mock.return_value = archived_timestamp
+            self.assertEqual(vars(self.mysql_media._process_row(row)), vars(f))
+
+        # empty or malformed archived name
+        row = {'upload_name': b'Test.jpeg', 'size': 12, 'type': b'image/jpeg',
+               'upload_timestamp': datetime.datetime(2022, 11, 30, 11, 25, 56),
+               'deleted_timestamp': datetime.datetime(2022, 11, 30, 14, 25, 56),
+               'sha1': b'56le7dx4g21ssp3jyb0xc8a5vlk4fjt', 'status': 'deleted',
+               'wiki': 'commonswiki', 'archived_name': b'',
+               'storage_path': b'/path/20221130132556!Test.jpeg'}
+        container = ('container', '/path/20221130132556!Test.jpeg')
+        f = File(wiki='commonswiki', upload_name='Test.jpeg',
+                 storage_container=container[0],
+                 storage_path=container[1],
+                 size=12, type='image/jpeg', status='deleted',
+                 upload_timestamp=datetime.datetime(2022, 11, 30, 11, 25, 56),
+                 deleted_timestamp=datetime.datetime(2022, 11, 30, 14, 25, 56),
+                 archived_timestamp=datetime.datetime(1970, 1, 1, 0, 0, 1),
+                 sha1='2c5f4c5ff0e57ffcea85c1da92b4599336d75fb9', md5=None)
+        swift_mock.return_value = container
+        with patch.object(self.mysql_media.swift, 'name2swift', swift_mock):
+            self.assertEqual(vars(self.mysql_media._process_row(row)), vars(f))
+
+        # storage path and storage name are both not null and different (storage_path wins)
+        row = {'upload_name': b'Test.jpeg', 'size': 12, 'type': b'image/jpeg',
+               'upload_timestamp': datetime.datetime(2022, 11, 30, 11, 25, 56),
+               'sha1': b'56le7dx4g21ssp3jyb0xc8a5vlk4fjt', 'status': 'archived',
+               'wiki': 'commonswiki', 'archived_name': b'20221130132556!Test.jpeg',
+               'storage_path': b'/20241130132556!Test.jpeg'}
+        f = File(wiki='commonswiki', upload_name='Test.jpeg',
+                 storage_container='container',
+                 storage_path='/20241130132556!xxx.jpeg',
+                 size=12, type='image/jpeg', status='archived',
+                 upload_timestamp=datetime.datetime(2022, 11, 30, 11, 25, 56),
+                 archived_timestamp=datetime.datetime(2022, 11, 30, 13, 25, 56),
+                 sha1='2c5f4c5ff0e57ffcea85c1da92b4599336d75fb9', md5=None)
+        swift_mock.return_value = ('container', '/20241130132556!xxx.jpeg')
         with patch.object(self.mysql_media.swift, 'name2swift', swift_mock):
             self.assertEqual(vars(self.mysql_media._process_row(row)), vars(f))
 

@@ -686,3 +686,22 @@ class Test_MySQLMetadata(TestCase):
             mock_db.close.return_value = 0
             self.mysql_metadata.close_db()
             self.assertIsNone(self.mysql_metadata.db)
+
+    def test_get_latest_upload_time(self):
+        """test querying the latest upload time"""
+        fks = ({'commonswiki': 1},
+               {},
+               {'public': 1, 'archived': 2, 'deleted': 3, 'hard-deleted': 4},
+               {}, {}, {}, {}, {}, {}, {})
+        with patch.object(self.mysql_metadata, 'query_and_fetchall') as mock_rows, \
+             patch.object(self.mysql_metadata, 'get_fks') as mock_fks:
+            # regular query
+            latest_date = datetime.datetime(2023, 12, 31, 13, 45, 55)
+            mock_fks.return_value = fks
+            # one file gets deleted successfully
+            mock_rows.return_value = (0, [{'upload_timestamp': latest_date}, ])
+            self.assertEqual(self.mysql_metadata.get_latest_upload_time('commonswiki'), latest_date)
+
+            # no rows returned
+            mock_rows.return_value = (0, [])
+            self.assertIsNone(self.mysql_metadata.get_latest_upload_time('commonswiki'))
