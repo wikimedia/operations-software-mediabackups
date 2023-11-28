@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import logging
 import requests
@@ -58,6 +59,21 @@ def format_api_result(upload):
     return {'title': title, 'sha1': sha1, 'upload_timestamp': upload_timestamp}
 
 
+def parse_arguments():
+    """
+    Reads the input arguments and returns them in the form of an object
+    """
+    parser = argparse.ArgumentParser(description=('Starts monitoring recentchanges of a given wiki since the last '
+                                                  'backed up file and inserts metadata from newly uploaded files '
+                                                  'into the pending list of files to backup. Send a SIGINT to the '
+                                                  'process (or ctrl-c, if in an interactive session) to stop it.'))
+    parser.add_argument('--wiki', '-w', required=True,
+                        help=('wiki name, as it appears on dblist files, to monitor for updates. '
+                              'Example: --wiki=commonswiki'))
+    arguments = parser.parse_args().__dict__
+    return arguments
+
+
 def main():
     """
     Queries the api for recentchanges and keep monitoring it so last uploaded files
@@ -68,15 +84,14 @@ def main():
                         filename='backup_quick_update.log', level=logging.DEBUG)
 
     config = read_yaml_config(READ_CONFIG_FILE)
-    if 'wiki' not in config.keys():
-        return
-    wiki = config['wiki']
+    arguments = parse_arguments()
+    wiki = arguments.get('wiki', 'commonswiki')
 
     mw = MySQLMedia(config)
     metadata = MySQLMetadata(config=read_yaml_config(WRITE_CONFIG_FILE))
 
     while True:
-        mw.connect_db()
+        mw.connect_db(wiki)
         metadata.connect_db()
         last_timestamp = metadata.get_latest_upload_time(wiki)
         for events in get_latest_uploaded_files_since(last_timestamp):

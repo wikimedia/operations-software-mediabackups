@@ -25,19 +25,17 @@ class MySQLQueryError(Exception):
     """Exception generated after MySQL has a query problem"""
 
 
+DEFAULT_CONFIG_FILE = '/etc/mediabackup/mediabackups_db.ini'
+DEFAULT_BATCH_SIZE = 1000
+
+
 class MySQLMetadata:
     """Create, update and query MySQL backup metadata to manage media backups"""
 
     def __init__(self, config):
         """Constructor"""
-        self.host = config.get('host', 'localhost')
-        self.port = config.get('port', 3306)
-        self.socket = config.get('socket', None)
-        self.database = config.get('database', 'mediabackups')
-        self.user = config.get('user', 'root')
-        self.password = config.get('password', '')
-        self.ssl = config.get('ssl', None)
-        self.batchsize = int(config.get('batchsize', 1000))
+        self.config_file = config.get('config_file', DEFAULT_CONFIG_FILE)
+        self.batchsize = int(config.get('batchsize', DEFAULT_BATCH_SIZE))
         self.db = None
 
     def list_backups_from_title(self, wiki, title):
@@ -633,15 +631,10 @@ class MySQLMetadata:
         """
         logger = logging.getLogger('backup')
         try:
-            self.db = pymysql.connect(host=self.host,
-                                      port=self.port,
-                                      unix_socket=self.socket,
-                                      database=self.database,
-                                      user=self.user,
-                                      password=self.password,
-                                      ssl=self.ssl)
+            self.db = pymysql.connect(read_default_file=self.config_file)
         except pymysql.err.OperationalError as mysql_connection_error:
-            logger.error('We could not connect to %s to store the stats', self.host)
+            self.db = None
+            logger.error('We could not connect to mediabackups metadata db with config %s', self.config_file)
             raise MySQLConnectionError from mysql_connection_error
 
     def close_db(self):

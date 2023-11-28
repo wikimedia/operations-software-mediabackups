@@ -4,29 +4,33 @@ production media files directly from the production wikis databases.
 """
 import datetime
 import logging
+import os
 
 import pymysql
 
 from mediabackups.File import File
 from mediabackups.SwiftMedia import SwiftMedia
-from mediabackups.Util import base36tobase16, mwdate2datetime
+from mediabackups.Util import base36tobase16, mwdate2datetime, read_dblist
 
 DEFAULT_BATCH_SIZE = 100
+DEFAULT_CONNECTION_FILE = '/etc/mediabackup/mw_db.ini'
+DEFAULT_DBLISTS_PATH = '/srv/mediawiki-config/dblists'
 
 
 class MySQLConnectionError(Exception):
     """Exception generated after MySQL has a connection problem"""
-    pass
 
 
 class MySQLQueryError(Exception):
     """Exception generated after MySQL has a query problem"""
-    pass
 
 
 class MySQLNotConnected(Exception):
     """Exception generated after trying to use list_files without connecting first"""
-    pass
+
+
+class WrongWiki(Exception):
+    """Exception generated after trying to use an invalid or nonexistent wiki"""
 
 
 class MySQLMedia:
@@ -74,15 +78,12 @@ class MySQLMedia:
 
     def __init__(self, config):
         """Constructor"""
-        self.host = config.get('host', 'localhost')
-        self.port = config.get('port', 3306)
-        self.socket = config.get('socket', None)
-        self.wiki = config.get('wiki', 'testwiki')
-        self.user = config.get('user', 'root')
-        self.password = config.get('password', '')
-        self.ssl = config.get('ssl', None)
+        self.sections = config.get('sections', {})
+        self.config_file = config.get('config_file', DEFAULT_CONNECTION_FILE)
         self.batchsize = config.get('batchsize', DEFAULT_BATCH_SIZE)
-        self.swift = SwiftMedia(config={'wiki': self.wiki, 'batchsize': self.batchsize})
+        self.dblists_path = config.get('dblists_path', DEFAULT_DBLISTS_PATH)
+        self.wiki = None
+        self.swift = None
         self.db = None
 
     def _process_row(self, row):
@@ -173,6 +174,14 @@ class MySQLMedia:
         Return a list of dictionaries with all results
         """
         logger = logging.getLogger('backup')
+        if self.db is None:
+            logger.error("We are not connected to a database before attempting to query it. Query: %s",
+                         query)
+            raise MySQLNotConnected
+        if self.wiki is None:
+            logger.error("We currently have no wiki selected. Query failed: %s", query)
+            raise WrongWiki
+
         cursor = self.db.cursor(pymysql.cursors.DictCursor)
         try:
             _ = cursor.execute(query, parameters)
@@ -180,7 +189,7 @@ class MySQLMedia:
         except (pymysql.err.ProgrammingError, pymysql.err.InternalError):
             logger.warning('A MySQL error occurred while inserting on the files, '
                            'retrying connection')
-            self.connect_db()
+            self.connect_db(self.wiki)
             cursor = self.db.cursor(pymysql.cursors.DictCursor)
             try:
                 _ = cursor.execute(query, parameters)
@@ -245,7 +254,7 @@ class MySQLMedia:
                 except StopIteration:
                     cursor.close()
                     break
-        return
+        return []
 
     def query_files(self, batch):
         """
@@ -253,6 +262,9 @@ class MySQLMedia:
         to be updated.
         """
         logger = logging.getLogger('backup')
+        if self.db is None:
+            logger.error('You must connect to the database before attempting to read tables')
+            raise MySQLNotConnected
         files = []
         self.db.autocommit(True)
         for upload in batch:
@@ -277,23 +289,47 @@ class MySQLMedia:
                                upload['title'])
         return files
 
-    def connect_db(self):
+    def resolve_wiki(self, wiki):
+        """
+        Returns a tuple with the host and port to connect to for the given wiki from the sections list of
+        hosts and ports and the dblists list of wikis per section. If the wiki is incorrect or unknown, it
+        returns None in the first result of the tuple.
+        """
+        host = None
+        port = None
+        for section, section_properties in self.sections.items():
+            section_wikis = read_dblist(os.path.join(self.dblists_path,
+                                                     section_properties.get('dblist', section + '.dblist')))
+            if wiki in section_wikis:
+                host = section_properties.get('host')
+                port = section_properties.get('port')
+                break
+        return host, port
+
+    def connect_db(self, wiki):
         """
         Connect to the database to read the file tables
         """
         logger = logging.getLogger('backup')
+        host, port = self.resolve_wiki(self.wiki)
+        if host is None:
+            logger.error("Wiki or database %s was not found in the list of wikis.", wiki)
+            self.wiki = None
+            self.db = None
+            raise WrongWiki
+        self.wiki = wiki
+        self.swift = SwiftMedia(config={'wiki': self.wiki, 'batchsize': self.batchsize})
         try:
-            self.db = pymysql.connect(host=self.host,
-                                      port=self.port,
-                                      unix_socket=self.socket,
+            self.db = pymysql.connect(host=host,
+                                      port=port,
                                       database=self.wiki,
-                                      user=self.user,
-                                      password=self.password,
-                                      ssl=self.ssl)
+                                      read_default_file=self.config_file)
         except pymysql.err.OperationalError as mysql_operational_error:
             logger.error('We could not connect to %s to retrieve the media '
                          'metainformation',
-                         self.host)
+                         host)
+            self.wiki = None
+            self.db = None
             raise MySQLConnectionError from mysql_operational_error
 
     def close_db(self):
@@ -301,4 +337,5 @@ class MySQLMedia:
         Close db connections
         """
         self.db.close()
+        self.wiki = None
         self.db = None

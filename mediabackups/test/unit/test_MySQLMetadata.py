@@ -3,7 +3,7 @@ Tests the MySQLMetadata.py classes and methods
 """
 import datetime
 from unittest import TestCase
-from unittest.mock import patch  # , MagicMock
+from unittest.mock import patch
 
 import pymysql
 
@@ -16,11 +16,7 @@ class Test_MySQLMetadata(TestCase):
 
     empty_config = {}
     normal_config = {
-        'host': 'db1001.eqiad.wmnet',
-        'port': 3314,
-        'database': 'mediabackups',
-        'user': 'mediabackup',
-        'password': 'a_password',
+        'config_file': 'a_file.conf',
         'batchsize': 5
     }
 
@@ -35,13 +31,7 @@ class Test_MySQLMetadata(TestCase):
         mysql_metadata = MySQLMetadata(self.empty_config)
         self.assertEqual(vars(mysql_metadata), {
             'batchsize': 1000,
-            'host': 'localhost',
-            'port': 3306,
-            'password': '',
-            'database': 'mediabackups',
-            'socket': None,
-            'ssl': None,
-            'user': 'root',
+            'config_file': '/etc/mediabackup/mediabackups_db.ini',
             'db': None
         })
 
@@ -49,13 +39,7 @@ class Test_MySQLMetadata(TestCase):
         mysql_metadata = MySQLMetadata(self.normal_config)
         self.assertEqual(vars(mysql_metadata), {
             'batchsize': 5,
-            'host': 'db1001.eqiad.wmnet',
-            'port': 3314,
-            'password': 'a_password',
-            'database': 'mediabackups',
-            'socket': None,
-            'ssl': None,
-            'user': 'mediabackup',
+            'config_file': 'a_file.conf',
             'db': None
         })
 
@@ -679,6 +663,7 @@ class Test_MySQLMetadata(TestCase):
             # connection failed
             mock_connect.side_effect = pymysql.err.OperationalError
             self.assertRaises(MySQLConnectionError, self.mysql_metadata.connect_db)
+            self.assertIsNone(self.mysql_metadata.db)
 
     def test_close_db(self):
         """test db connection closing interface"""

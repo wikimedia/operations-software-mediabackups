@@ -26,6 +26,16 @@ class SwiftMedia:
         self.wiki = config.get('wiki', None)
         self.batchsize = config.get('batchsize', DEFAULT_BATCH_SIZE)
 
+    def __eq__(self, other):
+        """Define comparison"""
+        return vars(self) == vars(other)
+
+    def __hash__(self):
+        """
+        Return a consistend hash.
+        """
+        return hash(self.wiki + '|' + str(self.batchsize))
+
     def isBigWiki(self):
         '''
         Returns true if the current wiki is in the list of big wikis
