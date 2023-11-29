@@ -4,8 +4,8 @@
 import logging
 import os
 
-import mediabackups.MySQLMedia
-import mediabackups.MySQLMetadata
+from mediabackups.MySQLMedia import MySQLMedia
+from mediabackups.MySQLMetadata import MySQLMetadata
 from mediabackups.Util import read_yaml_config, read_dblist
 
 READ_CONFIG_FILE = '/etc/mediabackup/mw_db.conf'
@@ -30,8 +30,8 @@ def main():
         logger.info('------------------------------------------------')
         logger.info(' Gathering metadata from %s...', wiki)
         logger.info('------------------------------------------------')
-        backup = mediabackups.MySQLMedia.MySQLMedia(config)
-        metadata = mediabackups.MySQLMetadata.MySQLMetadata(config=read_yaml_config(WRITE_CONFIG_FILE))
+        backup = MySQLMedia(config)
+        metadata = MySQLMetadata(config=read_yaml_config(WRITE_CONFIG_FILE))
         backup.connect_db(wiki)
         if backup.wiki is None:
             logger.error("Skipping processing of wiki: %s", wiki)
@@ -43,8 +43,9 @@ def main():
             logger.info('=================== %s ===================', table_source)
             for batch in backup.list_files(table_source=table_source):
                 for f in batch:
-                    logger.info(f)
+                    logger.debug(f)
                 metadata.add(batch)
+                logger.info("Batch processed until file %s", str(batch[-1]))
         backup.close_db()
         metadata.close_db()
         logger.info('Finished processing %s', wiki)

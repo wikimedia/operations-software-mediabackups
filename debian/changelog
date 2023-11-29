@@ -1,3 +1,20 @@
+mediabackups (0.2.0) bullseye; urgency=medium
+
+  * Now the temporary download dir on worker gets deleted automatically
+  * Move MySQL specific configuration to separate files, which will be
+    private and will allow one to control custom MySQL client
+    configuration from puppet from now on
+  * Move wiki-specific configuration to connect_db- in particular,
+    MySQLMedia.connect_db now requires a new wiki parameter and it
+    autoresolves the host to connect to
+  * MySQLMedia now has a list of sections with hosts and ports to be
+    able to connect to different hosts, depending on the wiki
+  * add-recent-uploads now has a compulsory wiki argument
+  * Make regular wiki metadata upgrades iterate over all wikis
+  * Improve unit test coverage
+
+ -- Jaime Crespo <jcrespo@wikimedia.org>  Wed, 29 Nov 2023 19:18:13 +0100
+
 mediabackups (0.1.7) bullseye; urgency=medium
 
   * Add support for quick backups for recent uploads
