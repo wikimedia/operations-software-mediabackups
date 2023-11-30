@@ -1,6 +1,8 @@
 mediabackups (0.2.0) bullseye; urgency=medium
 
   * Now the temporary download dir on worker gets deleted automatically
+  * Updated metadata database to match new MediaWiki maximum size
+    (schema change)
   * Move MySQL specific configuration to separate files, which will be
     private and will allow one to control custom MySQL client
     configuration from puppet from now on
@@ -12,6 +14,7 @@ mediabackups (0.2.0) bullseye; urgency=medium
   * add-recent-uploads now has a compulsory wiki argument
   * Make regular wiki metadata upgrades iterate over all wikis
   * Improve unit test coverage
+  * Catch exception in case of MediaWiki API timeout for quick update
 
  -- Jaime Crespo <jcrespo@wikimedia.org>  Wed, 29 Nov 2023 19:18:13 +0100
 

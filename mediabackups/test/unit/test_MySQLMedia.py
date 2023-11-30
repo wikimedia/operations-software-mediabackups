@@ -439,6 +439,9 @@ class Test_MySQLMedia(TestCase):
             mock_dblist.side_effect = mocked_list
             host, _ = self.mysql_media.resolve_wiki("wrongwiki")
             self.assertIsNone(host)
+            # invalid config
+            self.mysql_media.sections = None
+            self.assertRaises(WrongWiki, self.mysql_media.resolve_wiki, "commonswiki")
 
     def test_close_db(self):
         """Test closing a connection works as intended"""

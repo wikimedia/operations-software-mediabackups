@@ -297,12 +297,14 @@ class MySQLMedia:
         """
         host = None
         port = None
+        if not isinstance(self.sections, dict):
+            raise WrongWiki
         for section, section_properties in self.sections.items():
             section_wikis = read_dblist(os.path.join(self.dblists_path,
                                                      section_properties.get('dblist', section + '.dblist')))
             if wiki in section_wikis:
-                host = section_properties.get('host')
-                port = section_properties.get('port')
+                host = section_properties.get('host', 'localhost')
+                port = section_properties.get('port', 3306)
                 break
         return host, port
 
@@ -311,7 +313,7 @@ class MySQLMedia:
         Connect to the database to read the file tables
         """
         logger = logging.getLogger('backup')
-        host, port = self.resolve_wiki(self.wiki)
+        host, port = self.resolve_wiki(wiki)
         if host is None:
             logger.error("Wiki or database %s was not found in the list of wikis.", wiki)
             self.wiki = None
@@ -324,13 +326,13 @@ class MySQLMedia:
                                       port=port,
                                       database=self.wiki,
                                       read_default_file=self.config_file)
-        except pymysql.err.OperationalError as mysql_operational_error:
+        except (pymysql.err.OperationalError, pymysql.err.InternalError) as mysql_error:
             logger.error('We could not connect to %s to retrieve the media '
                          'metainformation',
                          host)
             self.wiki = None
             self.db = None
-            raise MySQLConnectionError from mysql_operational_error
+            raise MySQLConnectionError from mysql_error
 
     def close_db(self):
         """

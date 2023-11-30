@@ -632,10 +632,10 @@ class MySQLMetadata:
         logger = logging.getLogger('backup')
         try:
             self.db = pymysql.connect(read_default_file=self.config_file)
-        except pymysql.err.OperationalError as mysql_connection_error:
+        except (pymysql.err.OperationalError, pymysql.err.InternalError) as mysql_error:
             self.db = None
             logger.error('We could not connect to mediabackups metadata db with config %s', self.config_file)
-            raise MySQLConnectionError from mysql_connection_error
+            raise MySQLConnectionError from mysql_error
 
     def close_db(self):
         """

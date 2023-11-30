@@ -67,8 +67,7 @@ class Test_Util(unittest.TestCase):
         mock = mock_open()
         mock.side_effect = FileNotFoundError
         with patch('builtins.open', mock):
-            with self.assertRaises(FileNotFoundError):
-                Util.read_dblist(None)
+            self.assertRaises(FileNotFoundError, Util.read_dblist, None)
 
         # Not a concrete list of wikis
         data = """
@@ -78,8 +77,7 @@ class Test_Util(unittest.TestCase):
             %%testwikilist
         """
         with patch('builtins.open', mock_open(read_data=data)):
-            with self.assertRaises(EncounteredDBListExpression):
-                Util.read_dblist(None)
+            self.assertRaises(EncounteredDBListExpression, Util.read_dblist, None)
 
     @log_capture()
     def test_read_yaml_config(self, log):
@@ -101,7 +99,7 @@ class Test_Util(unittest.TestCase):
         # invalid yaml
         data = ":"
         with patch('builtins.open', mock_open(read_data=data)):
-            self.assertIsNone(Util.read_yaml_config(''))
+            self.assertEqual(Util.read_yaml_config(''), {})
             log.check(('backup', 'ERROR', 'Yaml configuration "" could not be loaded'))
 
     def test_sha1sum(self):

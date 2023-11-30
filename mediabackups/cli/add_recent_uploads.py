@@ -2,6 +2,7 @@
 
 import argparse
 import datetime
+import json
 import logging
 import requests
 import time
@@ -14,9 +15,14 @@ from mediabackups.Util import read_yaml_config
 READ_CONFIG_FILE = '/etc/mediabackup/mw_db.conf'
 WRITE_CONFIG_FILE = '/etc/mediabackup/mediabackups_db.conf'
 HTTP_HEADERS = {'User-agent': 'mediabackups/recentuploads https://phabricator.wikimedia.org/diffusion/OSWB/'}
+DEFAULT_WAIT_TIME_API_REQUESTS = 10
+DEFAULT_WAIT_TIME_BETWEEN_BATCHES = 1
+DEFAULT_WIKI = 'commonswiki'
 
 
 def get_latest_uploaded_files_since(date):
+    logger = logging.getLogger('backup')
+
     # API endpoint for recent file uploads
     api_url = 'https://commons.wikimedia.org/w/api.php'
     request = {'action': 'query', 'list': 'logevents', 'letype': 'upload',
@@ -31,11 +37,16 @@ def get_latest_uploaded_files_since(date):
     while True:
         req = request.copy()
         req.update(lastContinue)
-        result = requests.get(api_url, params=req, headers=HTTP_HEADERS).json()
+        try:
+            result = requests.get(api_url, params=req, headers=HTTP_HEADERS).json()
+        except json.decoder.JSONDecodeError as ex:
+            # This will happen on HTTP errors (e.g. we receive a 50X error)
+            logger.error("Error while decoding the json response: %s", ex)
+            break
         if 'error' in result:
-            raise Exception(result['error'])
+            logger.error("Error returned by the API call: %s", result['error'])
         if 'warnings' in result:
-            print(result['warnings'])
+            logger.warning(result['warnings'])
         if 'query' in result:
             yield result['query']
         if 'continue' not in result:
@@ -70,8 +81,14 @@ def parse_arguments():
                                                   'into the pending list of files to backup. Send a SIGINT to the '
                                                   'process (or ctrl-c, if in an interactive session) to stop it.'))
     parser.add_argument('--wiki', '-w', required=True,
-                        help=('wiki name, as it appears on dblist files, to monitor for updates. '
+                        help=('Wiki name, as it appears on dblist files, to monitor for updates. '
                               'Example: --wiki=commonswiki'))
+    parser.add_argument('--api-wait-time', '-a', default=DEFAULT_WAIT_TIME_API_REQUESTS,
+                        help=('Pause the given amount of time, given in seconds, between each new API request.'
+                              f'By default, {DEFAULT_WAIT_TIME_API_REQUESTS} second(s).'))
+    parser.add_argument('--batch-wait-time', '-b', default=DEFAULT_WAIT_TIME_BETWEEN_BATCHES,
+                        help=('Pause the given amount of time, given in seconds, between each batch request.'
+                              f'By default, {DEFAULT_WAIT_TIME_BETWEEN_BATCHES} second(s).'))
     arguments = parser.parse_args().__dict__
     return arguments
 
@@ -83,11 +100,13 @@ def main():
     """
     logger = logging.getLogger('backup')
     logging.basicConfig(format='[%(asctime)s] %(levelname)s:%(name)s %(message)s',
-                        filename='backup_quick_update.log', level=logging.DEBUG)
+                        filename='backup_quick_update.log', level=logging.INFO)
 
-    config = read_yaml_config(READ_CONFIG_FILE)
     arguments = parse_arguments()
-    wiki = arguments.get('wiki', 'commonswiki')
+    config = read_yaml_config(READ_CONFIG_FILE)
+    wiki = arguments.get('wiki', DEFAULT_WIKI)
+    api_wait_time = arguments.get('api_wait_time', DEFAULT_WAIT_TIME_API_REQUESTS)
+    batch_wait_time = arguments.get('batch_wait_time', DEFAULT_WAIT_TIME_BETWEEN_BATCHES)
 
     mw = MySQLMedia(config)
     metadata = MySQLMetadata(config=read_yaml_config(WRITE_CONFIG_FILE))
@@ -107,9 +126,10 @@ def main():
             for f in files:
                 logger.debug(f)
             metadata.check_and_update(wiki, files)
+            time.sleep(batch_wait_time)
         mw.close_db()
         metadata.close_db()
-        time.sleep(10)
+        time.sleep(api_wait_time)
 
 
 if __name__ == "__main__":

@@ -40,10 +40,10 @@ def read_yaml_config(file_name):
     config_file_path = os.path.join(home_dir, file_name)
     with open(config_file_path, 'r') as f:
         try:
-            return yaml.safe_load(f)
+            return yaml.safe_load(f) or {}
         except yaml.YAMLError:
-            logger.exception('Yaml configuration "%s" could not be loaded', file_name)
-            return None
+            logger.error('Yaml configuration "%s" could not be loaded', file_name)
+            return {}
 
 
 def sha1sum(path):
