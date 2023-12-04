@@ -38,12 +38,22 @@ def read_yaml_config(file_name):
     logger = logging.getLogger('backup')
     home_dir = str(Path.home())
     config_file_path = os.path.join(home_dir, file_name)
-    with open(config_file_path, 'r') as f:
-        try:
-            return yaml.safe_load(f) or {}
-        except yaml.YAMLError:
-            logger.error('Yaml configuration "%s" could not be loaded', file_name)
-            return {}
+    try:
+        with open(config_file_path, 'r', encoding='utf-8') as f:
+            try:
+                return yaml.safe_load(f) or {}
+            except yaml.YAMLError:
+                logger.error('Yaml configuration "%s" could not be loaded', file_name)
+                return {}
+    except FileNotFoundError:
+        logger.error("File %s was not found", config_file_path)
+        return {}
+    except PermissionError:
+        logger.error("Got a permission error while trying to read: %s", config_file_path)
+        return {}
+    except IOError:
+        logger.error("An error happened while trying to open file: %s", config_file_path)
+        return {}
 
 
 def sha1sum(path):

@@ -8,6 +8,7 @@ import urllib.parse
 import pymysql
 
 from mediabackups.File import File
+from mediabackups.Util import base36tobase16
 
 
 class ReadDictionaryException(Exception):
@@ -101,6 +102,43 @@ class MySQLMetadata:
         query = "wiki_name = %s AND deleted_timestamp = %s"
         parameters = (wiki, date)
         return self._query_backups(query, parameters)
+
+    def list_backups_from_title_upload_date_and_sha1(self, wiki, title, date, sha1):
+        """
+        Returns a list of backups of a wiki that where soft-deleted
+        from the details usually returned by deletion log files:
+        the original title, the upload date and the sha1 (in base 16)
+        """
+        query = "wiki_name = %s AND upload_name = %s AND upload_timestamp = %s AND files.sha1 = %s"
+        parameters = (wiki, title, date, sha1)
+        return self._query_backups(query, parameters)
+
+    def search_files(self, options):
+        """Given a search method, query the database in search of the matching files"""
+        logger = logging.getLogger('backup')
+
+        if options['method'] == 'upload_title':
+            file_list = self.list_backups_from_title(options['wiki'], options['value'])
+        elif options['method'] == 'sha1':
+            file_list = self.list_backups_from_sha1(options['wiki'], options['value'].zfill(40))
+        elif options['method'] == 'sha256':
+            file_list = self.list_backups_from_sha256(options['wiki'], options['value'].zfill(64))
+        elif options['method'] == 'sha1_base36':
+            file_list = self.list_backups_from_sha1(options['wiki'], base36tobase16(options['value']))
+        elif options['method'] == 'swift_path':
+            file_list = self.list_backups_from_path(options['wiki'],
+                                                    options['value']['container'],
+                                                    options['value']['path'])
+        elif options['method'] == 'upload_date':
+            file_list = self.list_backups_from_upload_date(options['wiki'], options['value'])
+        elif options['method'] == 'archive_date':
+            file_list = self.list_backups_from_archive_date(options['wiki'], options['value'])
+        elif options['method'] == 'delete_date':
+            file_list = self.list_backups_from_delete_date(options['wiki'], options['value'])
+        else:
+            logger.error('Invalid method to search a recovery file provided.')
+            return None
+        return file_list
 
     def _swift2url(self, status, container, path):
         """
