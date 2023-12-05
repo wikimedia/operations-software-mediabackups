@@ -1,3 +1,9 @@
+mediabackups (0.3.0) bullseye; urgency=medium
+
+  * Implemented batch deletion of media files
+
+ -- Jaime Crespo <jcrespo@wikimedia.org>  Mon, 04 Dec 2023 14:01:32 +0100
+
 mediabackups (0.2.0) bullseye; urgency=medium
 
   * Now the temporary download dir on worker gets deleted automatically
